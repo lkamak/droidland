@@ -117,3 +117,51 @@ def test_usage_endpoint(app_client, context):
     assert body["total_sessions"] == 2
     assert body["active_sessions"] == 1
     assert body["errored_sessions"] == 1
+
+
+def test_computers_endpoint(app_client, context):
+    # Seed computer data
+    context.db.execute(
+        """
+        INSERT INTO computers
+            (factory_computer_id, provider, state, repos_json, last_seen, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "comp-123",
+            "e2b",
+            "running",
+            '["acme/widgets","acme/tools"]',
+            "2026-06-10T12:00:00Z",
+            "2026-06-10T12:00:00Z",
+        ),
+    )
+    context.db.execute(
+        """
+        INSERT INTO computers
+            (factory_computer_id, provider, state, repos_json, last_seen, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "comp-456",
+            "e2b",
+            "idle",
+            '["example/repo"]',
+            "2026-06-10T11:00:00Z",
+            "2026-06-10T11:00:00Z",
+        ),
+    )
+
+    resp = app_client.get("/api/computers")
+    assert resp.status_code == 200
+    computers = resp.json()
+    assert len(computers) == 2
+
+    comp_ids = {c["factory_computer_id"] for c in computers}
+    assert "comp-123" in comp_ids
+    assert "comp-456" in comp_ids
+
+    comp_123 = next(c for c in computers if c["factory_computer_id"] == "comp-123")
+    assert comp_123["provider"] == "e2b"
+    assert comp_123["state"] == "running"
+    assert comp_123["repos_json"] == '["acme/widgets","acme/tools"]'
