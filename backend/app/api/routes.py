@@ -1,20 +1,40 @@
 import asyncio
 import json
+import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
 from ..context import AppContext
-from ..experts import get_expert, list_experts
-from ..models import NormalizedEvent, TriggerIn
+from ..experts import delete_expert, get_expert, list_experts, save_expert
+from ..models import (
+    AUTONOMY_LEVELS,
+    INTERACTION_MODES,
+    Expert,
+    ExpertBody,
+    ExpertIn,
+    NormalizedEvent,
+    TriggerIn,
+)
 from ..triggers import row_to_trigger, upsert_trigger
 
 router = APIRouter(prefix="/api")
 
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
 
 def ctx(request: Request) -> AppContext:
     return request.app.state.ctx
+
+
+def _validate_expert_fields(slug: str, autonomy: str, interaction_mode: str) -> None:
+    if not SLUG_RE.match(slug):
+        raise HTTPException(400, "slug must be lowercase alphanumeric with dashes")
+    if autonomy not in AUTONOMY_LEVELS:
+        raise HTTPException(400, f"autonomy must be one of {sorted(AUTONOMY_LEVELS)}")
+    if interaction_mode not in INTERACTION_MODES:
+        raise HTTPException(400, f"interaction_mode must be one of {sorted(INTERACTION_MODES)}")
 
 
 @router.get("/health")
@@ -42,16 +62,55 @@ async def experts_get(request: Request, slug: str) -> dict[str, Any]:
     return expert.model_dump()
 
 
+@router.post("/experts")
+async def experts_create(request: Request, payload: ExpertIn) -> dict[str, Any]:
+    c = ctx(request)
+    _validate_expert_fields(payload.slug, payload.autonomy, payload.interaction_mode)
+    if get_expert(c.db, payload.slug) is not None:
+        raise HTTPException(409, f"expert '{payload.slug}' already exists")
+    expert = save_expert(c.db, c.settings.experts_dir, Expert(**payload.model_dump()))
+    return expert.model_dump()
+
+
+@router.put("/experts/{slug}")
+async def experts_update(request: Request, slug: str, payload: ExpertBody) -> dict[str, Any]:
+    c = ctx(request)
+    if get_expert(c.db, slug) is None:
+        raise HTTPException(404, "expert not found")
+    _validate_expert_fields(slug, payload.autonomy, payload.interaction_mode)
+    expert = save_expert(c.db, c.settings.experts_dir, Expert(slug=slug, **payload.model_dump()))
+    return expert.model_dump()
+
+
+@router.delete("/experts/{slug}")
+async def experts_delete(request: Request, slug: str) -> dict[str, Any]:
+    c = ctx(request)
+    if not delete_expert(c.db, c.settings.experts_dir, slug):
+        raise HTTPException(404, "expert not found")
+    return {"deleted": slug}
+
+
 @router.post("/experts/validate")
 async def experts_validate(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
     skills = payload.get("skills", []) or []
     integrations = payload.get("integrations", []) or []
-    # Best-effort: without a live tool catalog we report what was declared.
+    slug = payload.get("slug", "")
+    warnings: list[str] = []
+    errors: list[str] = []
+    if slug and not SLUG_RE.match(slug):
+        errors.append("slug must be lowercase alphanumeric with dashes")
+    if payload.get("autonomy", "off") not in AUTONOMY_LEVELS:
+        errors.append("invalid autonomy")
+    if payload.get("interaction_mode", "auto") not in INTERACTION_MODES:
+        errors.append("invalid interaction_mode")
+    if integrations and not skills:
+        warnings.append("declares integrations but no skills/tools")
     return {
-        "ok": True,
+        "ok": not errors,
+        "errors": errors,
+        "warnings": warnings,
         "declared_skills": skills,
         "declared_integrations": integrations,
-        "warnings": [] if skills or not integrations else ["no skills declared"],
     }
 
 

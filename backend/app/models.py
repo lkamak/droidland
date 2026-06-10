@@ -6,8 +6,7 @@ AUTONOMY_LEVELS = {"off", "low", "medium", "high"}
 INTERACTION_MODES = {"auto", "spec", "agi", "mission"}
 
 
-class Expert(BaseModel):
-    slug: str
+class ExpertBody(BaseModel):
     name: str
     description: str = ""
     model: str = ""
@@ -17,6 +16,13 @@ class Expert(BaseModel):
     integrations: list[str] = Field(default_factory=list)
     run_in_worktree: bool = False
     prompt: str = ""
+
+
+class ExpertIn(ExpertBody):
+    slug: str
+
+
+class Expert(ExpertIn):
     file_path: str = ""
 
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Activation, Expert, Trigger, api } from "./api";
+import { ExpertEditor } from "./ExpertEditor";
 
 type Tab = "dashboard" | "catalog" | "triggers";
 
@@ -75,45 +76,81 @@ export function App() {
         ))}
       </nav>
 
-      {tab === "catalog" && <Catalog experts={experts} />}
+      {tab === "catalog" && <Catalog experts={experts} onChanged={refresh} />}
       {tab === "triggers" && <Triggers triggers={triggers} />}
       {tab === "dashboard" && <Dashboard activations={activations} />}
     </div>
   );
 }
 
-function Catalog({ experts }: { experts: Expert[] }) {
-  if (experts.length === 0) return <div className="empty">No experts loaded.</div>;
+function Catalog({ experts, onChanged }: { experts: Expert[]; onChanged: () => void }) {
+  const [editing, setEditing] = useState<Expert | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const close = () => {
+    setEditing(null);
+    setCreating(false);
+  };
+  const saved = () => {
+    close();
+    onChanged();
+  };
+  const remove = async (slug: string) => {
+    if (!confirm(`Delete expert "${slug}"?`)) return;
+    await api.deleteExpert(slug).catch((e) => alert(e.message));
+    onChanged();
+  };
+
+  if (creating || editing) {
+    return <ExpertEditor initial={editing} onSaved={saved} onCancel={close} />;
+  }
+
   return (
-    <div className="grid">
-      {experts.map((e) => (
-        <div key={e.slug} className="card">
-          <div className="name">{e.name}</div>
-          <p>{e.description}</p>
-          <div className="row" style={{ marginBottom: 8 }}>
-            <Badge label={`autonomy: ${e.autonomy}`} color={AUTONOMY_COLOR[e.autonomy] ?? "var(--gray)"} />
-            <Badge label={e.interaction_mode} color="var(--accent)" />
-            {e.run_in_worktree && <Badge label="worktree" color="var(--blue)" />}
-          </div>
-          <div className="row">
-            {e.integrations.length === 0 && <span className="chip">no integrations</span>}
-            {e.integrations.map((i) => (
-              <span
-                key={i}
-                className="chip"
-                style={{ color: SOURCE_COLOR[i] ?? "var(--muted)" }}
-              >
-                {i}
+    <div>
+      <div className="catalog-head">
+        <h2>Experts</h2>
+        <button className="primary" onClick={() => setCreating(true)}>
+          + New expert
+        </button>
+      </div>
+      {experts.length === 0 && <div className="empty">No experts yet. Create one to start.</div>}
+      <div className="grid">
+        {experts.map((e) => (
+          <div key={e.slug} className="card">
+            <div className="card-head">
+              <span className="name">{e.name}</span>
+              <span className="card-actions">
+                <button onClick={() => setEditing(e)}>edit</button>
+                <button className="danger" onClick={() => remove(e.slug)}>
+                  delete
+                </button>
               </span>
-            ))}
-            {e.skills.map((s) => (
-              <span key={s} className="chip">
-                {s}
-              </span>
-            ))}
+            </div>
+            <p>{e.description}</p>
+            <div className="row" style={{ marginBottom: 8 }}>
+              <Badge
+                label={`autonomy: ${e.autonomy}`}
+                color={AUTONOMY_COLOR[e.autonomy] ?? "var(--gray)"}
+              />
+              <Badge label={e.interaction_mode} color="var(--accent)" />
+              {e.run_in_worktree && <Badge label="worktree" color="var(--blue)" />}
+            </div>
+            <div className="row">
+              {e.integrations.length === 0 && <span className="chip">no integrations</span>}
+              {e.integrations.map((i) => (
+                <span key={i} className="chip" style={{ color: SOURCE_COLOR[i] ?? "var(--muted)" }}>
+                  {i}
+                </span>
+              ))}
+              {e.skills.map((s) => (
+                <span key={s} className="chip">
+                  {s}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

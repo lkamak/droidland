@@ -55,29 +55,70 @@ def load_experts_from_dir(experts_dir: str) -> list[Expert]:
     return experts
 
 
+def expert_to_markdown(e: Expert) -> str:
+    """Serialize an expert back to a persona markdown file with YAML front-matter."""
+    meta = {
+        "name": e.name,
+        "description": e.description,
+        "model": e.model,
+        "autonomy": e.autonomy,
+        "interaction_mode": e.interaction_mode,
+        "skills": e.skills,
+        "integrations": e.integrations,
+        "run_in_worktree": e.run_in_worktree,
+    }
+    front = yaml.safe_dump(meta, sort_keys=False, default_flow_style=False, allow_unicode=True)
+    return f"{_FRONTMATTER_DELIM}\n{front}{_FRONTMATTER_DELIM}\n\n{e.prompt.strip()}\n"
+
+
+def _upsert_expert(db: Database, e: Expert) -> None:
+    db.execute(
+        """
+        INSERT INTO experts
+            (slug, name, description, model, autonomy, interaction_mode,
+             skills_json, integrations_json, run_in_worktree, prompt, file_path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(slug) DO UPDATE SET
+            name=excluded.name, description=excluded.description, model=excluded.model,
+            autonomy=excluded.autonomy, interaction_mode=excluded.interaction_mode,
+            skills_json=excluded.skills_json, integrations_json=excluded.integrations_json,
+            run_in_worktree=excluded.run_in_worktree, prompt=excluded.prompt,
+            file_path=excluded.file_path
+        """,
+        (
+            e.slug, e.name, e.description, e.model, e.autonomy, e.interaction_mode,
+            dumps(e.skills), dumps(e.integrations), int(e.run_in_worktree),
+            e.prompt, e.file_path,
+        ),
+    )
+
+
 def sync_experts(db: Database, experts_dir: str) -> int:
     experts = load_experts_from_dir(experts_dir)
     for e in experts:
-        db.execute(
-            """
-            INSERT INTO experts
-                (slug, name, description, model, autonomy, interaction_mode,
-                 skills_json, integrations_json, run_in_worktree, prompt, file_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(slug) DO UPDATE SET
-                name=excluded.name, description=excluded.description, model=excluded.model,
-                autonomy=excluded.autonomy, interaction_mode=excluded.interaction_mode,
-                skills_json=excluded.skills_json, integrations_json=excluded.integrations_json,
-                run_in_worktree=excluded.run_in_worktree, prompt=excluded.prompt,
-                file_path=excluded.file_path
-            """,
-            (
-                e.slug, e.name, e.description, e.model, e.autonomy, e.interaction_mode,
-                dumps(e.skills), dumps(e.integrations), int(e.run_in_worktree),
-                e.prompt, e.file_path,
-            ),
-        )
+        _upsert_expert(db, e)
     return len(experts)
+
+
+def save_expert(db: Database, experts_dir: str, expert: Expert) -> Expert:
+    """Write the expert to `.factory/droids/<slug>.md` and upsert its DB row."""
+    directory = Path(experts_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{expert.slug}.md"
+    path.write_text(expert_to_markdown(expert), encoding="utf-8")
+    expert = expert.model_copy(update={"file_path": str(path)})
+    _upsert_expert(db, expert)
+    return expert
+
+
+def delete_expert(db: Database, experts_dir: str, slug: str) -> bool:
+    if get_expert(db, slug) is None:
+        return False
+    path = Path(experts_dir) / f"{slug}.md"
+    if path.exists():
+        path.unlink()
+    db.execute("DELETE FROM experts WHERE slug = ?", (slug,))
+    return True
 
 
 def row_to_expert(row: dict[str, Any]) -> Expert:

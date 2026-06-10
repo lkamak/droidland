@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -57,10 +58,13 @@ class FakeFactoryClient:
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
+    # Copy the prebuilt experts into a temp dir so authoring writes never touch the repo.
+    experts_copy = tmp_path / "droids"
+    shutil.copytree(EXPERTS_DIR, experts_copy)
     return Settings(
         factory_api_key="test-key",
         db_path=str(tmp_path / "test.db"),
-        experts_dir=EXPERTS_DIR,
+        experts_dir=str(experts_copy),
         target_repo="acme/widgets",
     )
 
