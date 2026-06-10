@@ -176,6 +176,55 @@ async def triggers_test(request: Request, trigger_id: int, event: dict[str, Any]
     return activation
 
 
+# --- Launch (ad-hoc expert activation) ---
+@router.post("/launch")
+async def launch_expert(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    """Launch an expert ad-hoc without a trigger (manual activation)."""
+    c = ctx(request)
+    expert_slug = payload.get("expert_slug", "").strip()
+    target_text = payload.get("target_text", "").strip()
+    target_repo = payload.get("target_repo", "").strip()
+    cwd = payload.get("cwd", "").strip()
+
+    if not expert_slug:
+        raise HTTPException(400, "expert_slug is required")
+    if not target_text:
+        raise HTTPException(400, "target_text is required (PR URL, Linear ticket, or instructions)")
+
+    expert = get_expert(c.db, expert_slug)
+    if expert is None:
+        raise HTTPException(404, f"expert '{expert_slug}' not found")
+
+    # Build a synthetic trigger and event for the manual launch
+    from ..models import Trigger
+    trigger = Trigger(
+        id=0,  # not persisted
+        source="manual",
+        event_type="launch",
+        condition={},
+        expert_slug=expert_slug,
+        target_repo=target_repo,
+        cwd=cwd,
+        prompt_template=target_text,
+        enabled=True,
+    )
+    norm = NormalizedEvent(
+        source="manual",
+        event_type="launch",
+        external_ref=f"manual-{datetime.now(UTC).isoformat()}",
+        title=f"Manual launch: {expert_slug}",
+        url="",
+        payload={"target_text": target_text},
+    )
+
+    computer_id = await c.compute.ensure_computer(target_repo or None)
+    activation = await c.activations.activate(trigger, expert, norm, computer_id)
+    if activation is None:
+        raise HTTPException(500, "failed to create activation")
+    c.broadcaster.publish("activation", activation)
+    return activation
+
+
 # --- Connectors ---
 @router.get("/connectors")
 async def connectors_list(request: Request) -> list[dict[str, Any]]:
