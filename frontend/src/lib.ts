@@ -51,7 +51,7 @@ export function emptyExpertForm(): ExpertForm {
     name: "",
     description: "",
     model: "",
-    autonomy: "off",
+    autonomy: "high",
     interaction_mode: "auto",
     skills: [],
     integrations: [],

@@ -22,7 +22,7 @@ def parse_expert_markdown(text: str, slug: str, file_path: str = "") -> Expert:
     if not isinstance(meta, dict):
         meta = {}
 
-    autonomy = str(meta.get("autonomy", "off"))
+    autonomy = str(meta.get("autonomy", "high"))
     if autonomy not in AUTONOMY_LEVELS:
         autonomy = "off"
     mode = str(meta.get("interaction_mode", "auto"))
@@ -127,7 +127,7 @@ def row_to_expert(row: dict[str, Any]) -> Expert:
         name=row["name"],
         description=row.get("description", ""),
         model=row.get("model", ""),
-        autonomy=row.get("autonomy", "off"),
+        autonomy=row.get("autonomy", "high"),
         interaction_mode=row.get("interaction_mode", "auto"),
         skills=loads(row.get("skills_json"), []),
         integrations=loads(row.get("integrations_json"), []),
