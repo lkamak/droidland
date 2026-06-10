@@ -68,6 +68,16 @@ export const EVENT_TYPES_BY_SOURCE: Record<string, string[]> = {
   linear: ["issue"],
 };
 
+// Event fields available as {{variables}} in a trigger's task prompt, by source.
+export const EVENT_VARS_BY_SOURCE: Record<string, string[]> = {
+  github: ["external_ref", "title", "url", "repo", "number", "head", "base", "author", "action"],
+  linear: ["external_ref", "identifier", "title", "url", "state"],
+};
+
+export function eventVarsForSource(source: string): string[] {
+  return EVENT_VARS_BY_SOURCE[source] ?? [];
+}
+
 export interface TriggerForm {
   source: string;
   event_type: string;

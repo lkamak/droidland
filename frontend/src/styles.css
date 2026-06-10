@@ -363,3 +363,25 @@ button.primary:disabled {
   font-weight: 600;
   cursor: pointer;
 }
+
+.field-hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+.field-hint code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.field-hint .var-chip {
+  margin-right: 4px;
+}
