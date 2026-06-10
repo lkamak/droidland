@@ -73,7 +73,38 @@ class Observability:
                     now,
                 ),
             )
+
+        # Fetch and store computers
+        computers_data = await self.client.list_computers()
+        computers = computers_data.get("data", []) if isinstance(computers_data, dict) else []
+        for comp in computers:
+            comp_id = comp.get("id")
+            if not comp_id:
+                continue
+            self.db.execute(
+                """
+                INSERT INTO computers
+                    (factory_computer_id, provider, state, repos_json, last_seen, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(factory_computer_id) DO UPDATE SET
+                    provider=excluded.provider,
+                    state=excluded.state,
+                    repos_json=excluded.repos_json,
+                    last_seen=excluded.last_seen,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    comp_id,
+                    comp.get("provider", ""),
+                    comp.get("state", ""),
+                    dumps(comp.get("repos", [])),
+                    comp.get("lastSeen", ""),
+                    now,
+                ),
+            )
+
         self.broadcaster.publish("sessions", {"count": len(sessions)})
+        self.broadcaster.publish("computers", {"count": len(computers)})
         return len(sessions)
 
     async def _loop(self) -> None:

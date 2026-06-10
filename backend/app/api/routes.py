@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -201,6 +202,51 @@ async def sessions_list(request: Request) -> list[dict[str, Any]]:
 @router.get("/computers")
 async def computers_list(request: Request) -> list[dict[str, Any]]:
     return ctx(request).db.query("SELECT * FROM computers ORDER BY id DESC")
+
+
+@router.get("/usage")
+async def usage_summary(request: Request) -> dict[str, Any]:
+    """Roll up token and credit usage across active sessions."""
+    sessions = ctx(request).db.query("SELECT * FROM session_cache")
+    total_input = 0
+    total_output = 0
+    total_credits = 0.0
+    active_count = 0
+    stale_count = 0
+    errored_count = 0
+
+    now = datetime.now(UTC)
+    for s in sessions:
+        tokens = json.loads(s.get("tokens_json") or "{}")
+        total_input += tokens.get("inputTokens", 0)
+        total_output += tokens.get("outputTokens", 0)
+        total_credits += tokens.get("totalCreditsUsed", 0.0)
+
+        status = s.get("status", "")
+        if status.startswith("error"):
+            errored_count += 1
+        elif status in ("running", "pending"):
+            active_count += 1
+
+        # Flag stale: updated more than 5 minutes ago and still running
+        updated = s.get("updated_at", "")
+        if updated and status in ("running", "pending"):
+            try:
+                last_update = datetime.fromisoformat(updated.replace("Z", "+00:00"))
+                if (now - last_update).total_seconds() > 300:
+                    stale_count += 1
+            except (ValueError, TypeError):
+                pass
+
+    return {
+        "total_input_tokens": total_input,
+        "total_output_tokens": total_output,
+        "total_credits": round(total_credits, 2),
+        "total_sessions": len(sessions),
+        "active_sessions": active_count,
+        "stale_sessions": stale_count,
+        "errored_sessions": errored_count,
+    }
 
 
 # --- SSE ---

@@ -56,6 +56,11 @@ CREATE TABLE IF NOT EXISTS computers (
     factory_computer_id TEXT NOT NULL,
     target_repo TEXT DEFAULT '',
     status TEXT DEFAULT 'unknown',
+    provider TEXT DEFAULT '',
+    state TEXT DEFAULT '',
+    repos_json TEXT DEFAULT '[]',
+    last_seen TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     UNIQUE (factory_computer_id)
 );
 

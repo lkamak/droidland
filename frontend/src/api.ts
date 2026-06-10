@@ -34,6 +34,26 @@ export interface Activation {
   created_at: string;
 }
 
+export interface Computer {
+  id: number;
+  factory_computer_id: string;
+  provider: string;
+  state: string;
+  repos_json: string;
+  last_seen: string;
+  updated_at: string;
+}
+
+export interface Usage {
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_credits: number;
+  total_sessions: number;
+  active_sessions: number;
+  stale_sessions: number;
+  errored_sessions: number;
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`/api${path}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -87,9 +107,11 @@ export const api = {
     send<Activation>("POST", `/triggers/${id}/test`, event),
   activations: () => get<Activation[]>("/activations"),
   sessions: () => get<Record<string, unknown>[]>("/sessions"),
+  computers: () => get<Computer[]>("/computers"),
+  usage: () => get<Usage>("/usage"),
   subscribe(onEvent: (type: string, data: unknown) => void): EventSource {
     const es = new EventSource("/api/stream");
-    ["activation", "sessions", "ping"].forEach((type) =>
+    ["activation", "sessions", "computers", "ping"].forEach((type) =>
       es.addEventListener(type, (e) => onEvent(type, JSON.parse((e as MessageEvent).data))),
     );
     return es;
