@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Activation, Expert, Trigger, api } from "./api";
 import { ExpertEditor } from "./ExpertEditor";
+import { TriggerEditor } from "./TriggerEditor";
 
 type Tab = "dashboard" | "catalog" | "triggers";
 
@@ -77,7 +78,9 @@ export function App() {
       </nav>
 
       {tab === "catalog" && <Catalog experts={experts} onChanged={refresh} />}
-      {tab === "triggers" && <Triggers triggers={triggers} />}
+      {tab === "triggers" && (
+        <Triggers triggers={triggers} experts={experts} onChanged={refresh} />
+      )}
       {tab === "dashboard" && <Dashboard activations={activations} />}
     </div>
   );
@@ -155,40 +158,117 @@ function Catalog({ experts, onChanged }: { experts: Expert[]; onChanged: () => v
   );
 }
 
-function Triggers({ triggers }: { triggers: Trigger[] }) {
-  if (triggers.length === 0) return <div className="empty">No triggers configured yet.</div>;
+function Triggers({
+  triggers,
+  experts,
+  onChanged,
+}: {
+  triggers: Trigger[];
+  experts: Expert[];
+  onChanged: () => void;
+}) {
+  const [editing, setEditing] = useState<Trigger | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const close = () => {
+    setEditing(null);
+    setCreating(false);
+  };
+  const saved = () => {
+    close();
+    onChanged();
+  };
+
+  const toggle = async (t: Trigger) => {
+    setBusy(true);
+    await api
+      .updateTrigger(t.id, { ...t, enabled: !t.enabled })
+      .catch((e) => alert(e.message));
+    setBusy(false);
+    onChanged();
+  };
+
+  const remove = async (t: Trigger) => {
+    if (!confirm(`Delete trigger #${t.id}?`)) return;
+    await api.deleteTrigger(t.id).catch((e) => alert(e.message));
+    onChanged();
+  };
+
+  const test = async (t: Trigger) => {
+    try {
+      const a = await api.testTrigger(t.id, {
+        external_ref: `manual-${Date.now()}`,
+        title: "Manual test",
+        payload: t.condition,
+      });
+      alert(`Fired ${t.expert_slug}. Session ${a.factory_session_id || "(pending)"}.`);
+      onChanged();
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+
+  if (creating || editing) {
+    return (
+      <TriggerEditor initial={editing} experts={experts} onSaved={saved} onCancel={close} />
+    );
+  }
+
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>source</th>
-          <th>event</th>
-          <th>condition</th>
-          <th>expert</th>
-          <th>status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {triggers.map((t) => (
-          <tr key={t.id}>
-            <td>{t.id}</td>
-            <td>
-              <Badge label={t.source} color={SOURCE_COLOR[t.source] ?? "var(--muted)"} />
-            </td>
-            <td className="mono">{t.event_type}</td>
-            <td className="mono">{JSON.stringify(t.condition)}</td>
-            <td>{t.expert_slug}</td>
-            <td>
-              <Badge
-                label={t.enabled ? "enabled" : "disabled"}
-                color={t.enabled ? "var(--green)" : "var(--gray)"}
-              />
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div>
+      <div className="catalog-head">
+        <h2>Triggers</h2>
+        <button className="primary" onClick={() => setCreating(true)}>
+          + New trigger
+        </button>
+      </div>
+      {triggers.length === 0 && <div className="empty">No triggers configured yet.</div>}
+      {triggers.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>source</th>
+              <th>event</th>
+              <th>condition</th>
+              <th>expert</th>
+              <th>status</th>
+              <th>actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {triggers.map((t) => (
+              <tr key={t.id}>
+                <td>{t.id}</td>
+                <td>
+                  <Badge label={t.source} color={SOURCE_COLOR[t.source] ?? "var(--muted)"} />
+                </td>
+                <td className="mono">{t.event_type}</td>
+                <td className="mono">{JSON.stringify(t.condition)}</td>
+                <td>{t.expert_slug}</td>
+                <td>
+                  <Badge
+                    label={t.enabled ? "enabled" : "disabled"}
+                    color={t.enabled ? "var(--green)" : "var(--gray)"}
+                  />
+                </td>
+                <td className="card-actions">
+                  <button onClick={() => test(t)}>test</button>
+                  <button onClick={() => toggle(t)} disabled={busy}>
+                    {t.enabled ? "disable" : "enable"}
+                  </button>
+                  <button onClick={() => setEditing(t)}>edit</button>
+                  <button className="danger" onClick={() => remove(t)}>
+                    delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 

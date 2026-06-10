@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { emptyExpertForm, parseList, slugify, validateExpert } from "./lib";
+import {
+  TriggerForm,
+  emptyExpertForm,
+  emptyTriggerForm,
+  parseCondition,
+  parseList,
+  slugify,
+  validateExpert,
+  validateTrigger,
+} from "./lib";
 
 describe("slugify", () => {
   it("lowercases and dashes", () => {
@@ -47,5 +56,44 @@ describe("emptyExpertForm", () => {
     expect(f.interaction_mode).toBe("auto");
     expect(f.run_in_worktree).toBe(false);
     expect(f.skills).toEqual([]);
+  });
+});
+
+describe("parseCondition", () => {
+  it("accepts an empty condition", () => {
+    expect(parseCondition("  ")).toEqual({ ok: true, value: {} });
+  });
+  it("parses a JSON object", () => {
+    expect(parseCondition('{"action":"opened"}')).toEqual({
+      ok: true,
+      value: { action: "opened" },
+    });
+  });
+  it("rejects invalid JSON", () => {
+    expect(parseCondition("{nope}").ok).toBe(false);
+  });
+  it("rejects non-objects", () => {
+    expect(parseCondition("[1,2]").ok).toBe(false);
+  });
+});
+
+describe("validateTrigger", () => {
+  const base: TriggerForm = { ...emptyTriggerForm(), expert_slug: "code-reviewer" };
+
+  it("accepts a valid trigger", () => {
+    expect(validateTrigger(base, ["code-reviewer"])).toEqual([]);
+  });
+  it("requires a known expert", () => {
+    expect(validateTrigger(base, ["other"])).toContain("select a valid expert");
+  });
+  it("rejects an invalid source", () => {
+    expect(validateTrigger({ ...base, source: "gitlab" }, ["code-reviewer"])).toContain(
+      "invalid source",
+    );
+  });
+  it("flags bad condition JSON", () => {
+    expect(
+      validateTrigger({ ...base, conditionText: "{bad}" }, ["code-reviewer"]),
+    ).toContain("condition must be valid JSON");
   });
 });

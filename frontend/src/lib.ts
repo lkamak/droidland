@@ -59,3 +59,68 @@ export function emptyExpertForm(): ExpertForm {
     prompt: "",
   };
 }
+
+// --- Triggers ---
+
+export const TRIGGER_SOURCES = ["github", "linear"] as const;
+export const EVENT_TYPES_BY_SOURCE: Record<string, string[]> = {
+  github: ["pull_request"],
+  linear: ["issue"],
+};
+
+export interface TriggerForm {
+  source: string;
+  event_type: string;
+  conditionText: string;
+  expert_slug: string;
+  target_repo: string;
+  cwd: string;
+  prompt_template: string;
+  enabled: boolean;
+}
+
+export interface ParsedCondition {
+  ok: boolean;
+  value: Record<string, unknown>;
+  error?: string;
+}
+
+/** Parse the condition JSON text into a flat object of scalar/string matchers. */
+export function parseCondition(text: string): ParsedCondition {
+  const trimmed = text.trim();
+  if (!trimmed) return { ok: true, value: {} };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return { ok: false, value: {}, error: "condition must be valid JSON" };
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { ok: false, value: {}, error: "condition must be a JSON object" };
+  }
+  return { ok: true, value: parsed as Record<string, unknown> };
+}
+
+export function validateTrigger(form: TriggerForm, expertSlugs: string[]): string[] {
+  const errors: string[] = [];
+  if (!TRIGGER_SOURCES.includes(form.source as (typeof TRIGGER_SOURCES)[number]))
+    errors.push("invalid source");
+  if (!form.event_type.trim()) errors.push("event type is required");
+  if (!expertSlugs.includes(form.expert_slug)) errors.push("select a valid expert");
+  const cond = parseCondition(form.conditionText);
+  if (!cond.ok) errors.push(cond.error ?? "invalid condition");
+  return errors;
+}
+
+export function emptyTriggerForm(): TriggerForm {
+  return {
+    source: "github",
+    event_type: "pull_request",
+    conditionText: '{"action": "opened"}',
+    expert_slug: "",
+    target_repo: "",
+    cwd: "",
+    prompt_template: "Review {{external_ref}}: {{title}}",
+    enabled: true,
+  };
+}

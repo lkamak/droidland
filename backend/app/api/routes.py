@@ -139,6 +139,15 @@ async def triggers_update(request: Request, trigger_id: int, payload: TriggerIn)
     return {"id": trigger_id}
 
 
+@router.delete("/triggers/{trigger_id}")
+async def triggers_delete(request: Request, trigger_id: int) -> dict[str, Any]:
+    c = ctx(request)
+    if c.db.query_one("SELECT id FROM triggers WHERE id = ?", (trigger_id,)) is None:
+        raise HTTPException(404, "trigger not found")
+    c.db.execute("DELETE FROM triggers WHERE id = ?", (trigger_id,))
+    return {"deleted": trigger_id}
+
+
 @router.post("/triggers/{trigger_id}/test")
 async def triggers_test(request: Request, trigger_id: int, event: dict[str, Any]) -> dict[str, Any]:
     """Fire a trigger with a synthetic event payload (manual smoke test)."""

@@ -55,3 +55,21 @@ def test_manual_poll_endpoint(app_client):
     resp = app_client.post("/api/connectors/poll")
     assert resp.status_code == 200
     assert resp.json() == {"activations_fired": 0}
+
+
+def test_default_triggers_seeded(app_client):
+    triggers = app_client.get("/api/triggers").json()
+    by_expert = {t["expert_slug"]: t for t in triggers}
+    assert "code-reviewer" in by_expert
+    assert "implementor" in by_expert
+    assert by_expert["code-reviewer"]["source"] == "github"
+    assert by_expert["implementor"]["source"] == "linear"
+
+
+def test_delete_trigger(app_client):
+    tid = app_client.post("/api/triggers", json={
+        "source": "github", "event_type": "pull_request",
+        "condition": {"action": "opened"}, "expert_slug": "code-reviewer",
+    }).json()["id"]
+    assert app_client.delete(f"/api/triggers/{tid}").status_code == 200
+    assert app_client.delete(f"/api/triggers/{tid}").status_code == 404

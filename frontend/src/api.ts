@@ -19,6 +19,7 @@ export interface Trigger {
   condition: Record<string, unknown>;
   expert_slug: string;
   target_repo: string;
+  cwd: string;
   prompt_template: string;
   enabled: boolean;
 }
@@ -59,6 +60,17 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
 
 export type ExpertPayload = Omit<Expert, never>;
 
+export interface TriggerPayload {
+  source: string;
+  event_type: string;
+  condition: Record<string, unknown>;
+  expert_slug: string;
+  target_repo: string;
+  cwd: string;
+  prompt_template: string;
+  enabled: boolean;
+}
+
 export const api = {
   health: () => get<Record<string, unknown>>("/health"),
   experts: () => get<Expert[]>("/experts"),
@@ -67,6 +79,12 @@ export const api = {
     send<Expert>("PUT", `/experts/${slug}`, e),
   deleteExpert: (slug: string) => send<{ deleted: string }>("DELETE", `/experts/${slug}`),
   triggers: () => get<Trigger[]>("/triggers"),
+  createTrigger: (t: TriggerPayload) => send<{ id: number }>("POST", "/triggers", t),
+  updateTrigger: (id: number, t: TriggerPayload) =>
+    send<{ id: number }>("PUT", `/triggers/${id}`, t),
+  deleteTrigger: (id: number) => send<{ deleted: number }>("DELETE", `/triggers/${id}`),
+  testTrigger: (id: number, event: Record<string, unknown>) =>
+    send<Activation>("POST", `/triggers/${id}/test`, event),
   activations: () => get<Activation[]>("/activations"),
   sessions: () => get<Record<string, unknown>[]>("/sessions"),
   subscribe(onEvent: (type: string, data: unknown) => void): EventSource {

@@ -134,7 +134,7 @@ Legend: [x] done, [~] partial, [ ] not started.
 
 ### Milestones
 - [~] **M1 - Phase 0 thin core.** Factory client, shared-computer manager, expert seeding, connector poll -> trigger match -> session activation, and dashboard reads are implemented and tested. Sessions "preflight" is not yet a dedicated check (deferred).
-- [~] **M2 - Full trigger layer.** GitHub + Linear connectors, rule matching, dedupe, and "Test trigger" all work. Connectors run from env config only; no per-connector config UI yet.
+- [x] **M2 - Full trigger layer.** GitHub + Linear connectors, rule matching, dedupe, and "Test trigger" all work, plus a trigger-authoring UI (create/edit/enable/delete/test) and seeded default triggers (PR-opened -> code-reviewer, Linear `implement` -> implementor). Connectors still run from env config only; no per-connector config UI yet.
 - [x] **M3 - Expert catalog UI + authoring.** Create/edit/delete experts via the UI, persisted to `.factory/droids/*.md` + DB with server-side validation. `validate` against `droid --list-tools` is still best-effort (checks slug/autonomy/mode + warns on integrations-without-skills); live tool-catalog validation remains a follow-up.
 - [~] **M4 - Observability dashboard.** Session cache + SSE + activations dashboard with app.factory.ai deep links ship. Token/credit display and computer-health widgets are not surfaced in the UI yet.
 - [ ] **M5 - Dogfood M2-M4 via droidland's own experts.**
@@ -150,14 +150,13 @@ Legend: [x] done, [~] partial, [ ] not started.
 - [x] FastAPI routes + SSE stream (`api/routes.py`, `main.py`).
 - [x] Expert authoring: create/update/delete endpoints + markdown write-back + validation.
 - [x] Expert editor UI (form + persona prompt) wired into the catalog.
-- [x] Backend tests (31 passing) + ruff clean.
-- [x] Frontend tests: vitest on pure helpers (9 passing); `tsc --noEmit` + `vite build` green.
+- [x] Trigger authoring: create/update/delete + seed defaults; UI with enable/disable/test.
+- [x] Backend tests (33 passing) + ruff clean.
+- [x] Frontend tests: vitest on pure helpers (17 passing); `tsc --noEmit` + `vite build` green.
 - [x] Frontend themed UI (catalog, triggers, dashboard).
 - [x] Docker image + docker-compose + `.env.example`.
 
 ### Known gaps / next up
-- Trigger **write** endpoints exist; add a trigger-authoring UI and seed default triggers
-  (PR-opened -> `code-reviewer`, Linear `implement` -> `implementor`).
 - Surface token/credit usage and Droid Computer health in the dashboard.
 - Sessions API preflight check and connector configuration UI.
 - Live tool-catalog validation (`droid --list-tools`) and `e2e-verifier` Playwright flow.

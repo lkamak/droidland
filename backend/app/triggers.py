@@ -4,6 +4,7 @@ from typing import Any
 
 from .config import Settings
 from .db import Database, dumps, loads
+from .experts import get_expert
 from .factory_client import FactoryClient
 from .models import Expert, NormalizedEvent, Trigger
 
@@ -172,3 +173,38 @@ def upsert_trigger(db: Database, t: dict[str, Any], trigger_id: int | None = Non
          int(t.get("enabled", True)), trigger_id),
     )
     return trigger_id
+
+
+DEFAULT_TRIGGERS: list[dict[str, Any]] = [
+    {
+        "source": "github",
+        "event_type": "pull_request",
+        "condition": {"action": "opened"},
+        "expert_slug": "code-reviewer",
+        "prompt_template": (
+            "Review pull request {{external_ref}}: {{title}}\nURL: {{url}}"
+        ),
+    },
+    {
+        "source": "linear",
+        "event_type": "issue",
+        "condition": {"labels": "implement"},
+        "expert_slug": "implementor",
+        "prompt_template": (
+            "Implement Linear ticket {{identifier}}: {{title}}\nURL: {{url}}"
+        ),
+    },
+]
+
+
+def seed_default_triggers(db: Database) -> int:
+    """Seed starter triggers when none exist and the referenced experts are present."""
+    existing = db.query_one("SELECT COUNT(*) AS c FROM triggers")
+    if existing and existing["c"] > 0:
+        return 0
+    seeded = 0
+    for t in DEFAULT_TRIGGERS:
+        if get_expert(db, t["expert_slug"]) is not None:
+            upsert_trigger(db, t)
+            seeded += 1
+    return seeded

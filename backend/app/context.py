@@ -10,7 +10,7 @@ from .factory_client import FactoryClient
 from .observability import Observability
 from .poller import Poller
 from .sse import Broadcaster
-from .triggers import ActivationService
+from .triggers import ActivationService, seed_default_triggers
 
 
 @dataclass
@@ -52,6 +52,7 @@ def build_context(
     connectors = connectors if connectors is not None else build_connectors(settings)
 
     sync_experts(db, settings.experts_dir)
+    seed_default_triggers(db)
 
     poller = Poller(db, connectors, activations, compute, broadcaster, settings)
     observability = Observability(db, client, broadcaster, settings)
