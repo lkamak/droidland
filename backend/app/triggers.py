@@ -78,11 +78,11 @@ class ActivationService:
         cur = self.db.execute(
             """
             INSERT OR IGNORE INTO activations
-                (trigger_id, expert_slug, external_ref, status, created_at)
-            VALUES (?, ?, ?, 'pending', ?)
+                (trigger_id, expert_slug, external_ref, status, created_at, source)
+            VALUES (?, ?, ?, 'pending', ?, ?)
             """,
             (trigger.id, trigger.expert_slug, event.external_ref,
-             datetime.now(UTC).isoformat()),
+             datetime.now(UTC).isoformat(), event.source),
         )
         if cur.rowcount == 0:
             return None

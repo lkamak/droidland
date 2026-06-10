@@ -60,3 +60,5 @@ class Activation(BaseModel):
     app_url: str = ""
     status: str = "created"
     created_at: str = ""
+    verdict: dict[str, Any] = Field(default_factory=dict)
+    source: str = ""
