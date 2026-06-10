@@ -10,7 +10,7 @@ class ExpertBody(BaseModel):
     name: str
     description: str = ""
     model: str = ""
-    autonomy: str = "off"
+    autonomy: str = "high"
     interaction_mode: str = "auto"
     skills: list[str] = Field(default_factory=list)
     integrations: list[str] = Field(default_factory=list)

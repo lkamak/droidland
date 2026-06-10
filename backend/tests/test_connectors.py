@@ -67,3 +67,19 @@ async def test_linear_connector_extracts_labels():
     assert events[0].event_type == "issue"
     assert events[0].payload["labels"] == ["implement"]
     assert cursor == "2026-01-03T00:00:00.000Z"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_linear_connector_looks_back_with_negative_duration():
+    """Empty cursor must query the PAST (negative duration), not the future."""
+    import json
+
+    route = respx.post("https://api.linear.app/graphql").mock(
+        return_value=httpx.Response(200, json={"data": {"issues": {"nodes": []}}})
+    )
+    conn = LinearConnector("lin-key")
+    await conn.poll("")
+
+    body = json.loads(route.calls.last.request.content)
+    assert body["variables"]["after"] == "-P1Y"

@@ -4,6 +4,10 @@ from ..models import NormalizedEvent
 
 _API = "https://api.linear.app/graphql"
 
+# Linear relative-time durations are relative to now; a NEGATIVE ISO-8601 duration
+# looks back in time. "P1Y" would mean one year in the FUTURE and match nothing.
+_DEFAULT_LOOKBACK = "-P1Y"
+
 _QUERY = """
 query Issues($after: DateTimeOrDuration) {
   issues(
@@ -37,7 +41,7 @@ class LinearConnector:
         return {"Authorization": self.api_key, "Content-Type": "application/json"}
 
     async def poll(self, cursor: str) -> tuple[list[NormalizedEvent], str]:
-        variables = {"after": cursor or "P1Y"}  # default look-back if no cursor yet
+        variables = {"after": cursor or _DEFAULT_LOOKBACK}  # look back when no cursor yet
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 _API, json={"query": _QUERY, "variables": variables}, headers=self._headers()

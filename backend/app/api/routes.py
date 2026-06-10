@@ -38,6 +38,17 @@ def _validate_expert_fields(slug: str, autonomy: str, interaction_mode: str) -> 
         raise HTTPException(400, f"interaction_mode must be one of {sorted(INTERACTION_MODES)}")
 
 
+def _save_expert_or_409(c: AppContext, expert: Expert) -> Expert:
+    try:
+        return save_expert(c.db, c.settings.experts_dir, expert)
+    except OSError as exc:
+        raise HTTPException(
+            500,
+            f"cannot write persona to '{c.settings.experts_dir}': {exc.strerror or exc}. "
+            "The experts directory must be writable (in Docker, mount it without ':ro').",
+        ) from exc
+
+
 @router.get("/health")
 async def health(request: Request) -> dict[str, Any]:
     c = ctx(request)
@@ -69,7 +80,7 @@ async def experts_create(request: Request, payload: ExpertIn) -> dict[str, Any]:
     _validate_expert_fields(payload.slug, payload.autonomy, payload.interaction_mode)
     if get_expert(c.db, payload.slug) is not None:
         raise HTTPException(409, f"expert '{payload.slug}' already exists")
-    expert = save_expert(c.db, c.settings.experts_dir, Expert(**payload.model_dump()))
+    expert = _save_expert_or_409(c, Expert(**payload.model_dump()))
     return expert.model_dump()
 
 
@@ -79,7 +90,7 @@ async def experts_update(request: Request, slug: str, payload: ExpertBody) -> di
     if get_expert(c.db, slug) is None:
         raise HTTPException(404, "expert not found")
     _validate_expert_fields(slug, payload.autonomy, payload.interaction_mode)
-    expert = save_expert(c.db, c.settings.experts_dir, Expert(slug=slug, **payload.model_dump()))
+    expert = _save_expert_or_409(c, Expert(slug=slug, **payload.model_dump()))
     return expert.model_dump()
 
 

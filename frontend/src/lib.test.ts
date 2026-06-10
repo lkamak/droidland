@@ -3,12 +3,26 @@ import {
   TriggerForm,
   emptyExpertForm,
   emptyTriggerForm,
+  eventVarsForSource,
   parseCondition,
   parseList,
   slugify,
   validateExpert,
   validateTrigger,
 } from "./lib";
+
+describe("eventVarsForSource", () => {
+  it("returns github event variables", () => {
+    expect(eventVarsForSource("github")).toContain("external_ref");
+    expect(eventVarsForSource("github")).toContain("number");
+  });
+  it("returns linear event variables", () => {
+    expect(eventVarsForSource("linear")).toContain("identifier");
+  });
+  it("returns empty for unknown sources", () => {
+    expect(eventVarsForSource("nope")).toEqual([]);
+  });
+});
 
 describe("slugify", () => {
   it("lowercases and dashes", () => {
@@ -52,7 +66,7 @@ describe("validateExpert", () => {
 describe("emptyExpertForm", () => {
   it("has safe defaults", () => {
     const f = emptyExpertForm();
-    expect(f.autonomy).toBe("off");
+    expect(f.autonomy).toBe("high");
     expect(f.interaction_mode).toBe("auto");
     expect(f.run_in_worktree).toBe(false);
     expect(f.skills).toEqual([]);

@@ -5,6 +5,7 @@ import {
   TRIGGER_SOURCES,
   TriggerForm,
   emptyTriggerForm,
+  eventVarsForSource,
   parseCondition,
   validateTrigger,
 } from "./lib";
@@ -137,12 +138,20 @@ export function TriggerEditor({ initial, experts, onSaved, onCancel }: Props) {
       </div>
 
       <label>
-        Prompt template
+        Task prompt for this event
         <textarea
           rows={4}
           value={form.prompt_template}
           onChange={(e) => set("prompt_template", e.target.value)}
         />
+        <small className="field-hint">
+          This is the per-event task appended after the expert&apos;s persona, telling it what to do
+          for this specific {form.source} {form.event_type}. Use{" "}
+          <code>{"{{variable}}"}</code> placeholders to inject event data. Available:{" "}
+          {eventVarsForSource(form.source).map((v) => (
+            <code key={v} className="var-chip">{`{{${v}}}`}</code>
+          ))}
+        </small>
       </label>
 
       {errors.length > 0 && (

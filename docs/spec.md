@@ -134,7 +134,7 @@ Legend: [x] done, [~] partial, [ ] not started.
 
 ### Milestones
 - [~] **M1 - Phase 0 thin core.** Factory client, shared-computer manager, expert seeding, connector poll -> trigger match -> session activation, and dashboard reads are implemented and tested. Sessions "preflight" is not yet a dedicated check (deferred).
-- [x] **M2 - Full trigger layer.** GitHub + Linear connectors, rule matching, dedupe, and "Test trigger" all work, plus a trigger-authoring UI (create/edit/enable/delete/test) and seeded default triggers (PR-opened -> code-reviewer, Linear `implement` -> implementor). Connectors still run from env config only; no per-connector config UI yet.
+- [x] **M2 - Full trigger layer.** GitHub + Linear connectors, rule matching, dedupe, and "Test trigger" all work, plus a trigger-authoring UI (create/edit/enable/delete/test) and seeded default triggers (PR-opened -> code-reviewer + e2e-verifier, Linear `implement` -> implementor). Connectors still run from env config only; no per-connector config UI yet.
 - [x] **M3 - Expert catalog UI + authoring.** Create/edit/delete experts via the UI, persisted to `.factory/droids/*.md` + DB with server-side validation. `validate` against `droid --list-tools` is still best-effort (checks slug/autonomy/mode + warns on integrations-without-skills); live tool-catalog validation remains a follow-up.
 - [~] **M4 - Observability dashboard.** Session cache + SSE + activations dashboard with app.factory.ai deep links ship. Token/credit display and computer-health widgets are not surfaced in the UI yet.
 - [ ] **M5 - Dogfood M2-M4 via droidland's own experts.**
