@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activation, Computer, Expert, Trigger, Usage, api } from "./api";
+import { Activation, ActivationFilters, Computer, Expert, Trigger, Usage, Verdict, api } from "./api";
 import { ExpertEditor } from "./ExpertEditor";
 import { TriggerEditor } from "./TriggerEditor";
 
@@ -46,24 +46,42 @@ export function App() {
   const [activations, setActivations] = useState<Activation[]>([]);
   const [computers, setComputers] = useState<Computer[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
+  const [filters, setFilters] = useState<ActivationFilters>({});
 
   const refresh = () => {
     api.experts().then(setExperts).catch(console.error);
     api.triggers().then(setTriggers).catch(console.error);
-    api.activations().then(setActivations).catch(console.error);
+    api.activations(filters).then(setActivations).catch(console.error);
     api.computers().then(setComputers).catch(console.error);
     api.usage().then(setUsage).catch(console.error);
+  };
+
+  const refreshActivations = () => {
+    api.activations(filters).then(setActivations).catch(console.error);
   };
 
   useEffect(() => {
     refresh();
     const es = api.subscribe((type) => {
-      if (type === "activation") api.activations().then(setActivations).catch(console.error);
+      if (type === "activation") refreshActivations();
       if (type === "computers") api.computers().then(setComputers).catch(console.error);
       if (type === "sessions") api.usage().then(setUsage).catch(console.error);
     });
     return () => es.close();
   }, []);
+
+  useEffect(() => {
+    refreshActivations();
+    // Update URL with filters
+    const params = new URLSearchParams();
+    if (filters.expert) params.set("expert", filters.expert);
+    if (filters.source) params.set("source", filters.source);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.date_from) params.set("date_from", filters.date_from);
+    if (filters.date_to) params.set("date_to", filters.date_to);
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
+  }, [filters]);
 
   return (
     <div className="shell">
@@ -88,7 +106,15 @@ export function App() {
         <Triggers triggers={triggers} experts={experts} onChanged={refresh} />
       )}
       {tab === "dashboard" && (
-        <Dashboard activations={activations} computers={computers} usage={usage} />
+        <Dashboard
+          activations={activations}
+          computers={computers}
+          usage={usage}
+          experts={experts}
+          filters={filters}
+          onFiltersChange={setFilters}
+          onRerun={refreshActivations}
+        />
       )}
     </div>
   );
@@ -284,37 +310,153 @@ function Dashboard({
   activations,
   computers,
   usage,
+  experts,
+  filters,
+  onFiltersChange,
+  onRerun,
 }: {
   activations: Activation[];
   computers: Computer[];
   usage: Usage | null;
+  experts: Expert[];
+  filters: ActivationFilters;
+  onFiltersChange: (filters: ActivationFilters) => void;
+  onRerun: () => void;
 }) {
+  const [rerunning, setRerunning] = useState<number | null>(null);
+
+  const parseVerdict = (verdictJson: string): Verdict => {
+    try {
+      return JSON.parse(verdictJson || "{}");
+    } catch {
+      return {};
+    }
+  };
+
+  const handleRerun = async (id: number) => {
+    setRerunning(id);
+    try {
+      await api.rerunActivation(id);
+      onRerun();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setRerunning(null);
+    }
+  };
+
+  const uniqueSources = Array.from(new Set(activations.map((a) => a.source).filter(Boolean)));
+  const uniqueStatuses = Array.from(new Set(activations.map((a) => a.status).filter(Boolean)));
+
   return (
     <div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "2rem" }}>
         <ComputersPanel computers={computers} />
         <UsagePanel usage={usage} />
       </div>
-      <h2>Recent activations</h2>
-      {activations.length === 0 && <div className="empty">No activations yet.</div>}
-      {activations.map((a) => (
-        <div key={a.id} className="activation">
-          <span className="row">
-            <span className="dot" style={{ background: statusColor(a.status) }} />
-            <strong>{a.expert_slug}</strong>
-            <span className="muted" style={{ color: "var(--muted)" }}>&rarr;</span>
-            <span className="mono">{a.external_ref}</span>
-          </span>
-          <span className="row">
-            <Badge label={a.status} color={statusColor(a.status)} />
-            {a.app_url && (
-              <a href={a.app_url} target="_blank" rel="noreferrer">
-                open in app.factory.ai &#8599;
-              </a>
-            )}
-          </span>
-        </div>
-      ))}
+
+      <div className="catalog-head">
+        <h2>Activations History</h2>
+      </div>
+
+      <div className="filters" style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
+        <select
+          value={filters.expert || ""}
+          onChange={(e) => onFiltersChange({ ...filters, expert: e.target.value || undefined })}
+          style={{ padding: "0.5rem", borderRadius: "4px" }}
+        >
+          <option value="">All Experts</option>
+          {experts.map((e) => (
+            <option key={e.slug} value={e.slug}>
+              {e.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filters.source || ""}
+          onChange={(e) => onFiltersChange({ ...filters, source: e.target.value || undefined })}
+          style={{ padding: "0.5rem", borderRadius: "4px" }}
+        >
+          <option value="">All Sources</option>
+          {uniqueSources.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filters.status || ""}
+          onChange={(e) => onFiltersChange({ ...filters, status: e.target.value || undefined })}
+          style={{ padding: "0.5rem", borderRadius: "4px" }}
+        >
+          <option value="">All Statuses</option>
+          {uniqueStatuses.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+
+        <input
+          type="date"
+          placeholder="From"
+          value={filters.date_from || ""}
+          onChange={(e) => onFiltersChange({ ...filters, date_from: e.target.value || undefined })}
+          style={{ padding: "0.5rem", borderRadius: "4px" }}
+        />
+
+        <input
+          type="date"
+          placeholder="To"
+          value={filters.date_to || ""}
+          onChange={(e) => onFiltersChange({ ...filters, date_to: e.target.value || undefined })}
+          style={{ padding: "0.5rem", borderRadius: "4px" }}
+        />
+
+        {Object.values(filters).some(Boolean) && (
+          <button onClick={() => onFiltersChange({})}>Clear Filters</button>
+        )}
+      </div>
+
+      {activations.length === 0 && <div className="empty">No activations match the filters.</div>}
+      {activations.map((a) => {
+        const verdict = parseVerdict(a.verdict_json);
+        return (
+          <div key={a.id} className="activation">
+            <span className="row">
+              <span className="dot" style={{ background: statusColor(a.status) }} />
+              <strong>{a.expert_slug}</strong>
+              <span className="muted" style={{ color: "var(--muted)" }}>&rarr;</span>
+              <span className="mono">{a.external_ref}</span>
+            </span>
+            <span className="row">
+              <Badge label={a.status} color={statusColor(a.status)} />
+              {a.source && <Badge label={a.source} color={SOURCE_COLOR[a.source] ?? "var(--muted)"} />}
+              {verdict.verdict && (
+                <Badge
+                  label={verdict.verdict}
+                  color={verdict.verdict === "pass" ? "var(--green)" : "var(--red)"}
+                />
+              )}
+              {verdict.needs_human && <Badge label="needs human" color="var(--amber)" />}
+              {a.app_url && (
+                <a href={a.app_url} target="_blank" rel="noreferrer">
+                  session &#8599;
+                </a>
+              )}
+              <button
+                onClick={() => handleRerun(a.id)}
+                disabled={rerunning === a.id}
+                style={{ marginLeft: "0.5rem" }}
+              >
+                {rerunning === a.id ? "re-running..." : "re-run"}
+              </button>
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

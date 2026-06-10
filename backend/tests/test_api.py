@@ -124,49 +124,71 @@ def test_usage_endpoint(app_client, context):
     assert body["errored_sessions"] == 1
 
 
-def test_computers_endpoint(app_client, context):
-    # Seed computer data
-    context.db.execute(
-        """
-        INSERT INTO computers
-            (factory_computer_id, provider, state, repos_json, last_seen, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "comp-123",
-            "e2b",
-            "running",
-            '["acme/widgets","acme/tools"]',
-            "2026-06-10T12:00:00Z",
-            "2026-06-10T12:00:00Z",
-        ),
-    )
-    context.db.execute(
-        """
-        INSERT INTO computers
-            (factory_computer_id, provider, state, repos_json, last_seen, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "comp-456",
-            "e2b",
-            "idle",
-            '["example/repo"]',
-            "2026-06-10T11:00:00Z",
-            "2026-06-10T11:00:00Z",
-        ),
-    )
+def test_activations_filtering(app_client, context):
+    # Create a trigger and some test activations
+    tid = app_client.post("/api/triggers", json={
+        "source": "github", "event_type": "pull_request",
+        "condition": {}, "expert_slug": "code-reviewer",
+    }).json()["id"]
 
-    resp = app_client.get("/api/computers")
+    # Fire multiple activations
+    app_client.post(f"/api/triggers/{tid}/test", json={"external_ref": "repo#1"})
+    app_client.post(f"/api/triggers/{tid}/test", json={"external_ref": "repo#2"})
+
+    # Create another trigger with a different expert
+    tid2 = app_client.post("/api/triggers", json={
+        "source": "linear", "event_type": "issue",
+        "condition": {}, "expert_slug": "implementor",
+    }).json()["id"]
+    app_client.post(f"/api/triggers/{tid2}/test", json={"external_ref": "LIN-1"})
+
+    # Test filtering by expert
+    resp = app_client.get("/api/activations?expert=code-reviewer")
     assert resp.status_code == 200
-    computers = resp.json()
-    assert len(computers) == 2
+    filtered = resp.json()
+    assert len(filtered) == 2
+    assert all(a["expert_slug"] == "code-reviewer" for a in filtered)
 
-    comp_ids = {c["factory_computer_id"] for c in computers}
-    assert "comp-123" in comp_ids
-    assert "comp-456" in comp_ids
+    # Test filtering by source
+    resp = app_client.get("/api/activations?source=linear")
+    assert resp.status_code == 200
+    filtered = resp.json()
+    assert len(filtered) == 1
+    assert filtered[0]["source"] == "linear"
 
-    comp_123 = next(c for c in computers if c["factory_computer_id"] == "comp-123")
-    assert comp_123["provider"] == "e2b"
-    assert comp_123["state"] == "running"
-    assert comp_123["repos_json"] == '["acme/widgets","acme/tools"]'
+    # Test filtering by status
+    resp = app_client.get("/api/activations?status=running")
+    assert resp.status_code == 200
+    filtered = resp.json()
+    assert all(a["status"] == "running" for a in filtered)
+
+
+def test_activation_rerun(app_client):
+    # Create a trigger and fire it
+    tid = app_client.post("/api/triggers", json={
+        "source": "github", "event_type": "pull_request",
+        "condition": {}, "expert_slug": "code-reviewer",
+        "prompt_template": "Review {{external_ref}}",
+    }).json()["id"]
+
+    activation = app_client.post(f"/api/triggers/{tid}/test", json={
+        "external_ref": "acme/widgets#5",
+    }).json()
+    activation_id = activation["id"]
+
+    # Re-run the activation
+    resp = app_client.post(f"/api/activations/{activation_id}/rerun")
+    assert resp.status_code == 200
+    rerun = resp.json()
+    assert rerun["expert_slug"] == "code-reviewer"
+    assert "rerun" in rerun["external_ref"]
+    assert rerun["id"] != activation_id
+
+    # Verify both activations exist
+    activations = app_client.get("/api/activations").json()
+    assert len(activations) == 2
+
+
+def test_activation_rerun_404(app_client):
+    resp = app_client.post("/api/activations/999/rerun")
+    assert resp.status_code == 404

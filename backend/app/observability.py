@@ -1,5 +1,7 @@
 import asyncio
+import json
 import logging
+import re
 from datetime import UTC, datetime
 
 from .config import Settings
@@ -8,6 +10,8 @@ from .factory_client import FactoryClient
 from .sse import Broadcaster
 
 log = logging.getLogger("droidland.observability")
+
+_VERDICT_RE = re.compile(r'```json\s*(\{[^`]*"verdict"\s*:[^`]*\})\s*```', re.DOTALL)
 
 
 DROIDLAND_TAG = "droidland"
@@ -31,6 +35,17 @@ def _expert_from_tags(session: dict) -> str:
         if n.startswith("expert:"):
             return n.split(":", 1)[1]
     return ""
+
+
+def _extract_verdict(text: str) -> dict | None:
+    """Extract verdict JSON from a fenced code block in session text."""
+    match = _VERDICT_RE.search(text)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return None
 
 
 class Observability:
@@ -73,6 +88,17 @@ class Observability:
                     now,
                 ),
             )
+            
+            # Update activation status from session
+            status = s.get("status", "")
+            if status:
+                self.db.execute(
+                    "UPDATE activations SET status = ? WHERE factory_session_id = ?",
+                    (status, session_id),
+                )
+
+        # Extract verdicts for completed activations
+        await self._extract_verdicts()
 
         # Fetch and store computers
         computers_data = await self.client.list_computers()
@@ -106,6 +132,37 @@ class Observability:
         self.broadcaster.publish("sessions", {"count": len(sessions)})
         self.broadcaster.publish("computers", {"count": len(computers)})
         return len(sessions)
+
+    async def _extract_verdicts(self) -> None:
+        """Fetch session details for completed activations and extract verdicts."""
+        # Only fetch for activations with completed/idle status but no verdict yet
+        activations = self.db.query(
+            """
+            SELECT id, factory_session_id FROM activations
+            WHERE factory_session_id != ''
+              AND verdict_json IN ('', '{}')
+              AND status IN ('completed', 'idle', 'error_stopped', 'stopped')
+            LIMIT 10
+            """
+        )
+        for act in activations:
+            try:
+                session_data = await self.client.get_session(act["factory_session_id"])
+                # Extract verdict from conversation or summary
+                conversation = session_data.get("conversation", "")
+                if isinstance(conversation, list):
+                    # Join all messages
+                    conversation = "\n".join(
+                        msg.get("text", "") for msg in conversation if isinstance(msg, dict)
+                    )
+                verdict = _extract_verdict(conversation)
+                if verdict:
+                    self.db.execute(
+                        "UPDATE activations SET verdict_json = ? WHERE id = ?",
+                        (dumps(verdict), act["id"]),
+                    )
+            except Exception as exc:  # noqa: BLE001
+                log.debug("Failed to extract verdict for activation %s: %s", act["id"], exc)
 
     async def _loop(self) -> None:
         while not self._stop.is_set():

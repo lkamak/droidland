@@ -67,3 +67,29 @@ async def test_refresh_stores_computers(db, fake_client, settings):
     assert len(computers) == 1
     assert computers[0]["provider"] == "e2b"
     assert computers[0]["state"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_extract_verdict_from_session(db, fake_client, settings):
+    from app.observability import _extract_verdict
+
+    # Test valid verdict extraction
+    text = '''Some session output
+```json
+{"verdict": "pass", "needs_human": false, "summary": "All tests passed"}
+```
+More output'''
+    verdict = _extract_verdict(text)
+    assert verdict is not None
+    assert verdict["verdict"] == "pass"
+    assert verdict["needs_human"] is False
+
+    # Test invalid JSON
+    text_invalid = '```json\n{"verdict": broken}\n```'
+    verdict_invalid = _extract_verdict(text_invalid)
+    assert verdict_invalid is None
+
+    # Test no verdict block
+    text_none = "No verdict here"
+    verdict_none = _extract_verdict(text_none)
+    assert verdict_none is None

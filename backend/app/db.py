@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS activations (
     app_url TEXT DEFAULT '',
     status TEXT DEFAULT 'created',
     created_at TEXT DEFAULT '',
+    verdict_json TEXT DEFAULT '{}',
+    source TEXT DEFAULT '',
     UNIQUE (trigger_id, external_ref)
 );
 
@@ -87,7 +89,20 @@ class Database:
     def init_schema(self) -> None:
         with self._lock:
             self._conn.executescript(SCHEMA)
+            self._migrate_schema()
             self._conn.commit()
+
+    def _migrate_schema(self) -> None:
+        """Apply incremental schema migrations for existing databases."""
+        # Add verdict_json column if missing
+        columns = {
+            row[1]
+            for row in self._conn.execute("PRAGMA table_info(activations)").fetchall()
+        }
+        if "verdict_json" not in columns:
+            self._conn.execute("ALTER TABLE activations ADD COLUMN verdict_json TEXT DEFAULT '{}'")
+        if "source" not in columns:
+            self._conn.execute("ALTER TABLE activations ADD COLUMN source TEXT DEFAULT ''")
 
     def execute(self, sql: str, params: Iterable[Any] = ()) -> sqlite3.Cursor:
         with self._lock:

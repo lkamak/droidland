@@ -201,8 +201,86 @@ async def connectors_poll(request: Request) -> dict[str, Any]:
 
 # --- Activations & sessions (observability) ---
 @router.get("/activations")
-async def activations_list(request: Request) -> list[dict[str, Any]]:
-    return ctx(request).db.query("SELECT * FROM activations ORDER BY id DESC")
+async def activations_list(
+    request: Request,
+    expert: str | None = None,
+    source: str | None = None,
+    status: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict[str, Any]]:
+    filters = []
+    params = []
+    if expert:
+        filters.append("expert_slug = ?")
+        params.append(expert)
+    if source:
+        filters.append("source = ?")
+        params.append(source)
+    if status:
+        filters.append("status = ?")
+        params.append(status)
+    if date_from:
+        filters.append("created_at >= ?")
+        params.append(date_from)
+    if date_to:
+        filters.append("created_at <= ?")
+        params.append(date_to)
+
+    where = f"WHERE {' AND '.join(filters)}" if filters else ""
+    sql = f"SELECT * FROM activations {where} ORDER BY id DESC"
+    return ctx(request).db.query(sql, params)
+
+
+@router.post("/activations/{activation_id}/rerun")
+async def activations_rerun(request: Request, activation_id: int) -> dict[str, Any]:
+    """Re-run an activation by creating a new one with the same trigger and external ref."""
+    c = ctx(request)
+    
+    # Fetch the original activation
+    activation = c.db.query_one("SELECT * FROM activations WHERE id = ?", (activation_id,))
+    if activation is None:
+        raise HTTPException(404, "activation not found")
+    
+    trigger_id = activation.get("trigger_id")
+    if trigger_id is None:
+        raise HTTPException(400, "activation has no associated trigger")
+    
+    # Fetch the trigger
+    trigger_row = c.db.query_one("SELECT * FROM triggers WHERE id = ?", (trigger_id,))
+    if trigger_row is None:
+        raise HTTPException(404, "trigger not found")
+    trigger = row_to_trigger(trigger_row)
+    
+    # Fetch the expert
+    expert = get_expert(c.db, trigger.expert_slug)
+    if expert is None:
+        raise HTTPException(400, "trigger references missing expert")
+    
+    # Create a new external ref with timestamp to avoid dedupe
+    original_ref = activation["external_ref"]
+    rerun_ref = f"{original_ref}-rerun-{int(datetime.now(UTC).timestamp())}"
+    
+    # Create normalized event for re-run
+    norm = NormalizedEvent(
+        source=activation.get("source", trigger.source),
+        event_type=trigger.event_type,
+        external_ref=rerun_ref,
+        title=f"Re-run of {original_ref}",
+        url=activation.get("app_url", ""),
+        payload={"original_ref": original_ref, "rerun": True},
+    )
+    
+    # Ensure computer exists
+    computer_id = await c.compute.ensure_computer(trigger.target_repo or None)
+    
+    # Create new activation
+    new_activation = await c.activations.activate(trigger, expert, norm, computer_id)
+    if new_activation is None:
+        raise HTTPException(409, "failed to create re-run activation")
+    
+    c.broadcaster.publish("activation", new_activation)
+    return new_activation
 
 
 @router.get("/sessions")

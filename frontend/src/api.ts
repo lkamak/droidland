@@ -32,6 +32,15 @@ export interface Activation {
   app_url: string;
   status: string;
   created_at: string;
+  verdict_json: string;
+  source: string;
+}
+
+export interface Verdict {
+  verdict?: "pass" | "fail";
+  needs_human?: boolean;
+  summary?: string;
+  findings?: unknown[];
 }
 
 export interface Computer {
@@ -91,6 +100,14 @@ export interface TriggerPayload {
   enabled: boolean;
 }
 
+export interface ActivationFilters {
+  expert?: string;
+  source?: string;
+  status?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
 export const api = {
   health: () => get<Record<string, unknown>>("/health"),
   experts: () => get<Expert[]>("/experts"),
@@ -105,7 +122,17 @@ export const api = {
   deleteTrigger: (id: number) => send<{ deleted: number }>("DELETE", `/triggers/${id}`),
   testTrigger: (id: number, event: Record<string, unknown>) =>
     send<Activation>("POST", `/triggers/${id}/test`, event),
-  activations: () => get<Activation[]>("/activations"),
+  activations: (filters?: ActivationFilters) => {
+    const params = new URLSearchParams();
+    if (filters?.expert) params.set("expert", filters.expert);
+    if (filters?.source) params.set("source", filters.source);
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.date_from) params.set("date_from", filters.date_from);
+    if (filters?.date_to) params.set("date_to", filters.date_to);
+    const query = params.toString();
+    return get<Activation[]>(`/activations${query ? `?${query}` : ""}`);
+  },
+  rerunActivation: (id: number) => send<Activation>("POST", `/activations/${id}/rerun`),
   sessions: () => get<Record<string, unknown>[]>("/sessions"),
   computers: () => get<Computer[]>("/computers"),
   usage: () => get<Usage>("/usage"),
