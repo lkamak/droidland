@@ -1,0 +1,31 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DROIDLAND_DB_PATH: /data/droidland.db
+      DROIDLAND_EXPERTS_DIR: /app/.factory/droids
+    volumes:
+      - ./backend/app:/app/app
+      - ./.factory/droids:/app/.factory/droids:ro
+      - droidland-data:/data
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_TARGET: http://backend:8000
+    volumes:
+      - ./frontend:/app
+    command: sh -c "npm install && npm run dev"
+    depends_on:
+      - backend
+
+volumes:
+  droidland-data:
