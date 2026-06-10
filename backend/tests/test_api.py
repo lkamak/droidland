@@ -73,3 +73,47 @@ def test_delete_trigger(app_client):
     }).json()["id"]
     assert app_client.delete(f"/api/triggers/{tid}").status_code == 200
     assert app_client.delete(f"/api/triggers/{tid}").status_code == 404
+
+
+def test_usage_endpoint(app_client, context):
+    # Seed some session data
+    context.db.execute(
+        """
+        INSERT INTO session_cache
+            (factory_session_id, expert_slug, status, tokens_json, app_url, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "sess-1",
+            "code-reviewer",
+            "running",
+            '{"inputTokens":100,"outputTokens":50,"totalCreditsUsed":0.15}',
+            "http://example.com",
+            "2026-06-10T12:00:00Z",
+        ),
+    )
+    context.db.execute(
+        """
+        INSERT INTO session_cache
+            (factory_session_id, expert_slug, status, tokens_json, app_url, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "sess-2",
+            "implementor",
+            "error",
+            '{"inputTokens":200,"outputTokens":100,"totalCreditsUsed":0.25}',
+            "http://example.com",
+            "2026-06-10T12:00:00Z",
+        ),
+    )
+
+    resp = app_client.get("/api/usage")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_input_tokens"] == 300
+    assert body["total_output_tokens"] == 150
+    assert body["total_credits"] == 0.4
+    assert body["total_sessions"] == 2
+    assert body["active_sessions"] == 1
+    assert body["errored_sessions"] == 1

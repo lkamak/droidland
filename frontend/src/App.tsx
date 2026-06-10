@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activation, Expert, Trigger, api } from "./api";
+import { Activation, Computer, Expert, Trigger, Usage, api } from "./api";
 import { ExpertEditor } from "./ExpertEditor";
 import { TriggerEditor } from "./TriggerEditor";
 
@@ -44,17 +44,23 @@ export function App() {
   const [experts, setExperts] = useState<Expert[]>([]);
   const [triggers, setTriggers] = useState<Trigger[]>([]);
   const [activations, setActivations] = useState<Activation[]>([]);
+  const [computers, setComputers] = useState<Computer[]>([]);
+  const [usage, setUsage] = useState<Usage | null>(null);
 
   const refresh = () => {
     api.experts().then(setExperts).catch(console.error);
     api.triggers().then(setTriggers).catch(console.error);
     api.activations().then(setActivations).catch(console.error);
+    api.computers().then(setComputers).catch(console.error);
+    api.usage().then(setUsage).catch(console.error);
   };
 
   useEffect(() => {
     refresh();
     const es = api.subscribe((type) => {
       if (type === "activation") api.activations().then(setActivations).catch(console.error);
+      if (type === "computers") api.computers().then(setComputers).catch(console.error);
+      if (type === "sessions") api.usage().then(setUsage).catch(console.error);
     });
     return () => es.close();
   }, []);
@@ -81,7 +87,9 @@ export function App() {
       {tab === "triggers" && (
         <Triggers triggers={triggers} experts={experts} onChanged={refresh} />
       )}
-      {tab === "dashboard" && <Dashboard activations={activations} />}
+      {tab === "dashboard" && (
+        <Dashboard activations={activations} computers={computers} usage={usage} />
+      )}
     </div>
   );
 }
@@ -272,9 +280,21 @@ function Triggers({
   );
 }
 
-function Dashboard({ activations }: { activations: Activation[] }) {
+function Dashboard({
+  activations,
+  computers,
+  usage,
+}: {
+  activations: Activation[];
+  computers: Computer[];
+  usage: Usage | null;
+}) {
   return (
     <div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "2rem" }}>
+        <ComputersPanel computers={computers} />
+        <UsagePanel usage={usage} />
+      </div>
       <h2>Recent activations</h2>
       {activations.length === 0 && <div className="empty">No activations yet.</div>}
       {activations.map((a) => (
@@ -295,6 +315,82 @@ function Dashboard({ activations }: { activations: Activation[] }) {
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function ComputersPanel({ computers }: { computers: Computer[] }) {
+  return (
+    <div className="card">
+      <h3>Droid Computers</h3>
+      {computers.length === 0 && <div className="empty">No computers found.</div>}
+      {computers.map((c) => {
+        const repos = JSON.parse(c.repos_json || "[]") as string[];
+        const stateColor = c.state === "running" ? "var(--green)" : "var(--gray)";
+        return (
+          <div key={c.id} style={{ marginBottom: "1rem", paddingBottom: "1rem", borderBottom: "1px solid var(--border)" }}>
+            <div className="row" style={{ marginBottom: "0.5rem" }}>
+              <span className="dot" style={{ background: stateColor }} />
+              <strong>{c.provider}</strong>
+              <Badge label={c.state} color={stateColor} />
+            </div>
+            <div className="mono" style={{ fontSize: "0.85rem", color: "var(--muted)" }}>
+              {repos.length > 0 ? repos.join(", ") : "no repos"}
+            </div>
+            {c.last_seen && (
+              <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: "0.25rem" }}>
+                last seen: {new Date(c.last_seen).toLocaleString()}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function UsagePanel({ usage }: { usage: Usage | null }) {
+  if (!usage) return <div className="card"><h3>Usage</h3><div className="empty">Loading...</div></div>;
+
+  return (
+    <div className="card">
+      <h3>Token & Credit Usage</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <span>Total Sessions:</span>
+          <strong>{usage.total_sessions}</strong>
+        </div>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <span>Active:</span>
+          <Badge label={String(usage.active_sessions)} color="var(--green)" />
+        </div>
+        {usage.stale_sessions > 0 && (
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span>Stale:</span>
+            <Badge label={String(usage.stale_sessions)} color="var(--amber)" />
+          </div>
+        )}
+        {usage.errored_sessions > 0 && (
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span>Errored:</span>
+            <Badge label={String(usage.errored_sessions)} color="var(--red)" />
+          </div>
+        )}
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.75rem", marginTop: "0.25rem" }}>
+          <div className="row" style={{ justifyContent: "space-between", marginBottom: "0.5rem" }}>
+            <span>Input Tokens:</span>
+            <span className="mono">{usage.total_input_tokens.toLocaleString()}</span>
+          </div>
+          <div className="row" style={{ justifyContent: "space-between", marginBottom: "0.5rem" }}>
+            <span>Output Tokens:</span>
+            <span className="mono">{usage.total_output_tokens.toLocaleString()}</span>
+          </div>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span>Total Credits:</span>
+            <strong className="mono">${usage.total_credits.toFixed(2)}</strong>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

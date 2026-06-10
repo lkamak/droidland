@@ -41,3 +41,29 @@ async def test_refresh_filters_by_droidland_tag(db, fake_client, settings):
     assert db.query_one(
         "SELECT 1 FROM session_cache WHERE factory_session_id = 'external-1'"
     ) is None
+
+
+@pytest.mark.asyncio
+async def test_refresh_stores_computers(db, fake_client, settings):
+    # Mock computers response
+    async def mock_list_computers():
+        return {
+            "data": [
+                {
+                    "id": "comp-1",
+                    "provider": "e2b",
+                    "state": "running",
+                    "repos": ["acme/widgets"],
+                    "lastSeen": "2026-01-01T12:00:00Z",
+                }
+            ]
+        }
+    fake_client.list_computers = mock_list_computers
+
+    obs = Observability(db, fake_client, Broadcaster(), settings)
+    await obs.refresh_once()
+
+    computers = db.query("SELECT * FROM computers WHERE factory_computer_id = 'comp-1'")
+    assert len(computers) == 1
+    assert computers[0]["provider"] == "e2b"
+    assert computers[0]["state"] == "running"
