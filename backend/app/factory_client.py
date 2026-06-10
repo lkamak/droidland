@@ -10,6 +10,14 @@ class FactoryError(RuntimeError):
         super().__init__(f"Factory API error {status}: {detail}")
 
 
+def _normalize_repo(value: str) -> str:
+    if value.startswith(("http://", "https://", "git@", "ssh://", "git://")):
+        return value
+    if value.count("/") == 1 and not value.startswith("/"):
+        return f"https://github.com/{value}.git"
+    return value
+
+
 class FactoryClient:
     """Async client for the Factory public API (Computers + Sessions)."""
 
@@ -43,15 +51,21 @@ class FactoryClient:
 
     # --- Computers ---
     async def create_computer(
-        self, name: str, repos: list[str], provider: str = "e2b", auto_install_deps: bool = True
+        self,
+        name: str,
+        repos: list[str],
+        provider: str = "e2b",
+        auto_install_deps: bool = True,
+        remote_user: str = "git",
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "name": name,
             "provider": provider,
             "autoInstallDeps": auto_install_deps,
+            "remoteUser": remote_user,
         }
         if repos:
-            body["repos"] = repos
+            body["repos"] = [_normalize_repo(r) for r in repos]
         return await self._request("POST", "/api/v0/computers", json=body)
 
     async def get_computer(self, computer_id: str) -> dict[str, Any]:
