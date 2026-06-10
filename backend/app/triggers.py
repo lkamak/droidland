@@ -175,6 +175,43 @@ def upsert_trigger(db: Database, t: dict[str, Any], trigger_id: int | None = Non
     return trigger_id
 
 
+_E2E_VERIFIER_PROMPT = """A pull request needs end-to-end verification with Playwright.
+
+PR: {{external_ref}} — "{{title}}"
+URL: {{url}}
+Repo: {{repo}}   Branch: {{head}} -> {{base}}
+
+Do the following, in order:
+
+1. Check out the PR branch ({{head}}) and read the diff for {{external_ref}} so you know exactly
+   which behaviors changed and what the change is meant to accomplish.
+2. Build and start the application on this computer: install dependencies, run the dev/build
+   command, and confirm the app is reachable before you start testing.
+3. Using Playwright, first run the project's existing end-to-end suite. Then exercise the critical
+   user flows AND every flow touched by this PR, asserting the expected end state for each. You may
+   add or adjust only the Playwright specs/fixtures needed to cover the changed behavior — do not
+   modify product code.
+4. Judge whether the changes make sense: does the app behave the way the PR intends, are there
+   regressions in adjacent flows, and do the observed results match the PR description? Call out any
+   mismatch explicitly.
+5. Capture artifacts for the run: the Playwright HTML report, traces (trace.zip), videos, and
+   screenshots — especially for any failure, with the failing step clearly labeled.
+6. Post a single review comment on PR {{external_ref}} via the GitHub integration that contains:
+   - a pass/fail results table, one row per flow;
+   - inline screenshots embedded for each failure;
+   - a link (or committed path) to the full Playwright HTML report and trace files;
+   - a one-paragraph assessment of whether the change is sound and safe to merge.
+   If binary artifacts cannot be embedded directly in the comment, commit them under an
+   `e2e-artifacts/` folder on the PR branch and link them from the comment.
+
+End your final message with a fenced JSON verdict:
+
+```json
+{"verdict": "pass|fail", "flows_run": 0, "failures": [], "artifacts": "...", "assessment": "..."}
+```
+"""
+
+
 DEFAULT_TRIGGERS: list[dict[str, Any]] = [
     {
         "source": "github",
@@ -184,6 +221,13 @@ DEFAULT_TRIGGERS: list[dict[str, Any]] = [
         "prompt_template": (
             "Review pull request {{external_ref}}: {{title}}\nURL: {{url}}"
         ),
+    },
+    {
+        "source": "github",
+        "event_type": "pull_request",
+        "condition": {"action": "opened"},
+        "expert_slug": "e2e-verifier",
+        "prompt_template": _E2E_VERIFIER_PROMPT,
     },
     {
         "source": "linear",

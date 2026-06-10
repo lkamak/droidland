@@ -62,8 +62,13 @@ def test_default_triggers_seeded(app_client):
     by_expert = {t["expert_slug"]: t for t in triggers}
     assert "code-reviewer" in by_expert
     assert "implementor" in by_expert
+    assert "e2e-verifier" in by_expert
     assert by_expert["code-reviewer"]["source"] == "github"
     assert by_expert["implementor"]["source"] == "linear"
+    e2e = by_expert["e2e-verifier"]
+    assert e2e["source"] == "github"
+    assert e2e["event_type"] == "pull_request"
+    assert "Playwright" in e2e["prompt_template"]
 
 
 def test_delete_trigger(app_client):
