@@ -91,6 +91,13 @@ export interface TriggerPayload {
   enabled: boolean;
 }
 
+export interface LaunchPayload {
+  expert_slug: string;
+  target_text: string;
+  target_repo?: string;
+  cwd?: string;
+}
+
 export const api = {
   health: () => get<Record<string, unknown>>("/health"),
   experts: () => get<Expert[]>("/experts"),
@@ -105,6 +112,7 @@ export const api = {
   deleteTrigger: (id: number) => send<{ deleted: number }>("DELETE", `/triggers/${id}`),
   testTrigger: (id: number, event: Record<string, unknown>) =>
     send<Activation>("POST", `/triggers/${id}/test`, event),
+  launch: (payload: LaunchPayload) => send<Activation>("POST", "/launch", payload),
   activations: () => get<Activation[]>("/activations"),
   sessions: () => get<Record<string, unknown>[]>("/sessions"),
   computers: () => get<Computer[]>("/computers"),

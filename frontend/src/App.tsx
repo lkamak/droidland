@@ -3,7 +3,7 @@ import { Activation, Computer, Expert, Trigger, Usage, api } from "./api";
 import { ExpertEditor } from "./ExpertEditor";
 import { TriggerEditor } from "./TriggerEditor";
 
-type Tab = "dashboard" | "catalog" | "triggers";
+type Tab = "dashboard" | "catalog" | "triggers" | "launch";
 
 const AUTONOMY_COLOR: Record<string, string> = {
   off: "var(--gray)",
@@ -76,7 +76,7 @@ export function App() {
       </p>
 
       <nav className="tabs">
-        {(["dashboard", "catalog", "triggers"] as Tab[]).map((t) => (
+        {(["dashboard", "launch", "catalog", "triggers"] as Tab[]).map((t) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
             {t}
           </button>
@@ -87,6 +87,7 @@ export function App() {
       {tab === "triggers" && (
         <Triggers triggers={triggers} experts={experts} onChanged={refresh} />
       )}
+      {tab === "launch" && <Launch experts={experts} onLaunched={refresh} />}
       {tab === "dashboard" && (
         <Dashboard activations={activations} computers={computers} usage={usage} />
       )}
@@ -275,6 +276,171 @@ function Triggers({
             ))}
           </tbody>
         </table>
+      )}
+    </div>
+  );
+}
+
+function Launch({ experts, onLaunched }: { experts: Expert[]; onLaunched: () => void }) {
+  const [expertSlug, setExpertSlug] = useState("");
+  const [targetText, setTargetText] = useState("");
+  const [targetRepo, setTargetRepo] = useState("");
+  const [cwd, setCwd] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [lastResult, setLastResult] = useState<Activation | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!expertSlug.trim() || !targetText.trim()) {
+      alert("Expert and target are required");
+      return;
+    }
+    setBusy(true);
+    setLastResult(null);
+    try {
+      const activation = await api.launch({
+        expert_slug: expertSlug,
+        target_text: targetText,
+        target_repo: targetRepo || undefined,
+        cwd: cwd || undefined,
+      });
+      setLastResult(activation);
+      onLaunched();
+      setTargetText("");
+      setTargetRepo("");
+      setCwd("");
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2>Launch an Expert</h2>
+      <p style={{ color: "var(--muted)", marginBottom: "1.5rem" }}>
+        Fire any expert ad hoc with a GitHub PR URL, Linear ticket identifier, or free-form
+        instructions.
+      </p>
+
+      <form onSubmit={submit} className="card" style={{ maxWidth: 600 }}>
+        <div style={{ marginBottom: "1rem" }}>
+          <label htmlFor="expert-select" style={{ display: "block", marginBottom: "0.25rem" }}>
+            Expert *
+          </label>
+          <select
+            id="expert-select"
+            value={expertSlug}
+            onChange={(e) => setExpertSlug(e.target.value)}
+            required
+            style={{
+              width: "100%",
+              padding: "0.5rem",
+              background: "var(--input-bg)",
+              border: "1px solid var(--border)",
+              borderRadius: "4px",
+              color: "var(--text)",
+            }}
+          >
+            <option value="">-- select an expert --</option>
+            {experts.map((e) => (
+              <option key={e.slug} value={e.slug}>
+                {e.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: "1rem" }}>
+          <label htmlFor="target-text" style={{ display: "block", marginBottom: "0.25rem" }}>
+            Target (PR URL, Linear ticket, or instructions) *
+          </label>
+          <textarea
+            id="target-text"
+            value={targetText}
+            onChange={(e) => setTargetText(e.target.value)}
+            required
+            rows={4}
+            placeholder="e.g. Review https://github.com/acme/widgets/pull/42 or Implement LUC-123: Add login form"
+            style={{
+              width: "100%",
+              padding: "0.5rem",
+              background: "var(--input-bg)",
+              border: "1px solid var(--border)",
+              borderRadius: "4px",
+              color: "var(--text)",
+              fontFamily: "inherit",
+              resize: "vertical",
+            }}
+          />
+        </div>
+
+        <div style={{ marginBottom: "1rem" }}>
+          <label htmlFor="target-repo" style={{ display: "block", marginBottom: "0.25rem" }}>
+            Target repo (optional)
+          </label>
+          <input
+            id="target-repo"
+            type="text"
+            value={targetRepo}
+            onChange={(e) => setTargetRepo(e.target.value)}
+            placeholder="e.g. acme/widgets"
+            style={{
+              width: "100%",
+              padding: "0.5rem",
+              background: "var(--input-bg)",
+              border: "1px solid var(--border)",
+              borderRadius: "4px",
+              color: "var(--text)",
+            }}
+          />
+        </div>
+
+        <div style={{ marginBottom: "1.5rem" }}>
+          <label htmlFor="cwd" style={{ display: "block", marginBottom: "0.25rem" }}>
+            Working directory (optional)
+          </label>
+          <input
+            id="cwd"
+            type="text"
+            value={cwd}
+            onChange={(e) => setCwd(e.target.value)}
+            placeholder="e.g. /repo"
+            style={{
+              width: "100%",
+              padding: "0.5rem",
+              background: "var(--input-bg)",
+              border: "1px solid var(--border)",
+              borderRadius: "4px",
+              color: "var(--text)",
+            }}
+          />
+        </div>
+
+        <button type="submit" className="primary" disabled={busy}>
+          {busy ? "Launching..." : "Launch expert"}
+        </button>
+      </form>
+
+      {lastResult && (
+        <div className="card" style={{ marginTop: "1.5rem", maxWidth: 600 }}>
+          <h3 style={{ marginBottom: "0.75rem" }}>Activation created</h3>
+          <div style={{ marginBottom: "0.5rem" }}>
+            <strong>Expert:</strong> {lastResult.expert_slug}
+          </div>
+          <div style={{ marginBottom: "0.5rem" }}>
+            <strong>Session ID:</strong> <span className="mono">{lastResult.factory_session_id}</span>
+          </div>
+          <div style={{ marginBottom: "0.75rem" }}>
+            <Badge label={lastResult.status} color={statusColor(lastResult.status)} />
+          </div>
+          {lastResult.app_url && (
+            <a href={lastResult.app_url} target="_blank" rel="noreferrer" className="primary">
+              Open in app.factory.ai &#8599;
+            </a>
+          )}
+        </div>
       )}
     </div>
   );

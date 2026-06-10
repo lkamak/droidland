@@ -165,3 +165,55 @@ def test_computers_endpoint(app_client, context):
     assert comp_123["provider"] == "e2b"
     assert comp_123["state"] == "running"
     assert comp_123["repos_json"] == '["acme/widgets","acme/tools"]'
+
+
+def test_launch_expert_validates_inputs(app_client):
+    # Missing expert_slug
+    resp = app_client.post("/api/launch", json={"target_text": "Review this PR"})
+    assert resp.status_code == 400
+    assert "expert_slug" in resp.json()["detail"]
+
+    # Missing target_text
+    resp = app_client.post("/api/launch", json={"expert_slug": "code-reviewer"})
+    assert resp.status_code == 400
+    assert "target_text" in resp.json()["detail"]
+
+    # Unknown expert
+    resp = app_client.post("/api/launch", json={
+        "expert_slug": "nonexistent-expert",
+        "target_text": "Do something",
+    })
+    assert resp.status_code == 404
+
+
+def test_launch_expert_creates_activation(app_client):
+    resp = app_client.post("/api/launch", json={
+        "expert_slug": "code-reviewer",
+        "target_text": "Review PR https://github.com/acme/widgets/pull/42",
+        "target_repo": "acme/widgets",
+        "cwd": "/repo",
+    })
+    assert resp.status_code == 200
+    activation = resp.json()
+    assert activation["expert_slug"] == "code-reviewer"
+    assert activation["factory_session_id"] == "sess-1"
+    assert activation["status"] == "running"
+    assert activation["external_ref"].startswith("manual-")
+
+    # Check activation was persisted
+    activations = app_client.get("/api/activations").json()
+    assert any(
+        a["expert_slug"] == "code-reviewer" and a["external_ref"] == activation["external_ref"]
+        for a in activations
+    )
+
+
+def test_launch_expert_with_linear_ticket(app_client):
+    resp = app_client.post("/api/launch", json={
+        "expert_slug": "implementor",
+        "target_text": "Implement Linear ticket LUC-123: Add login form",
+    })
+    assert resp.status_code == 200
+    activation = resp.json()
+    assert activation["expert_slug"] == "implementor"
+    assert activation["factory_session_id"] == "sess-1"
