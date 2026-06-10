@@ -1,7 +1,41 @@
 import { useEffect, useState } from "react";
 import { Activation, Expert, Trigger, api } from "./api";
 
-type Tab = "catalog" | "triggers" | "dashboard";
+type Tab = "dashboard" | "catalog" | "triggers";
+
+const AUTONOMY_COLOR: Record<string, string> = {
+  off: "var(--gray)",
+  low: "var(--blue)",
+  medium: "var(--amber)",
+  high: "var(--red)",
+};
+
+const SOURCE_COLOR: Record<string, string> = {
+  github: "#8b949e",
+  linear: "var(--violet)",
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  running: "var(--green)",
+  pending: "var(--amber)",
+  idle: "var(--gray)",
+};
+
+function statusColor(status: string): string {
+  if (status.startsWith("error")) return "var(--red)";
+  return STATUS_COLOR[status] ?? "var(--gray)";
+}
+
+function Badge({ label, color }: { label: string; color: string }) {
+  return (
+    <span
+      className="badge"
+      style={{ color, borderColor: color, background: `color-mix(in srgb, ${color} 14%, transparent)` }}
+    >
+      {label}
+    </span>
+  );
+}
 
 export function App() {
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -24,11 +58,18 @@ export function App() {
   }, []);
 
   return (
-    <div style={{ fontFamily: "system-ui", maxWidth: 980, margin: "0 auto", padding: 24 }}>
-      <h1>Droidland</h1>
-      <nav style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+    <div className="shell">
+      <div className="brand">
+        <div className="logo" />
+        <h1>Droidland</h1>
+      </div>
+      <p className="subtitle">
+        Orchestrate Factory expert droids: catalog, signal-driven triggers, and live session health.
+      </p>
+
+      <nav className="tabs">
         {(["dashboard", "catalog", "triggers"] as Tab[]).map((t) => (
-          <button key={t} onClick={() => setTab(t)} disabled={tab === t}>
+          <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
             {t}
           </button>
         ))}
@@ -42,17 +83,35 @@ export function App() {
 }
 
 function Catalog({ experts }: { experts: Expert[] }) {
+  if (experts.length === 0) return <div className="empty">No experts loaded.</div>;
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+    <div className="grid">
       {experts.map((e) => (
-        <div key={e.slug} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-          <strong>{e.name}</strong>
-          <p style={{ color: "#555", fontSize: 14 }}>{e.description}</p>
-          <div style={{ fontSize: 12, color: "#777" }}>
-            autonomy: {e.autonomy} | mode: {e.interaction_mode} | worktree:{" "}
-            {String(e.run_in_worktree)}
+        <div key={e.slug} className="card">
+          <div className="name">{e.name}</div>
+          <p>{e.description}</p>
+          <div className="row" style={{ marginBottom: 8 }}>
+            <Badge label={`autonomy: ${e.autonomy}`} color={AUTONOMY_COLOR[e.autonomy] ?? "var(--gray)"} />
+            <Badge label={e.interaction_mode} color="var(--accent)" />
+            {e.run_in_worktree && <Badge label="worktree" color="var(--blue)" />}
           </div>
-          <div style={{ fontSize: 12 }}>integrations: {e.integrations.join(", ") || "none"}</div>
+          <div className="row">
+            {e.integrations.length === 0 && <span className="chip">no integrations</span>}
+            {e.integrations.map((i) => (
+              <span
+                key={i}
+                className="chip"
+                style={{ color: SOURCE_COLOR[i] ?? "var(--muted)" }}
+              >
+                {i}
+              </span>
+            ))}
+            {e.skills.map((s) => (
+              <span key={s} className="chip">
+                {s}
+              </span>
+            ))}
+          </div>
         </div>
       ))}
     </div>
@@ -60,27 +119,35 @@ function Catalog({ experts }: { experts: Expert[] }) {
 }
 
 function Triggers({ triggers }: { triggers: Trigger[] }) {
+  if (triggers.length === 0) return <div className="empty">No triggers configured yet.</div>;
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+    <table>
       <thead>
         <tr>
-          <th align="left">#</th>
-          <th align="left">source</th>
-          <th align="left">event</th>
-          <th align="left">condition</th>
-          <th align="left">expert</th>
-          <th align="left">enabled</th>
+          <th>#</th>
+          <th>source</th>
+          <th>event</th>
+          <th>condition</th>
+          <th>expert</th>
+          <th>status</th>
         </tr>
       </thead>
       <tbody>
         {triggers.map((t) => (
-          <tr key={t.id} style={{ borderTop: "1px solid #eee" }}>
+          <tr key={t.id}>
             <td>{t.id}</td>
-            <td>{t.source}</td>
-            <td>{t.event_type}</td>
-            <td>{JSON.stringify(t.condition)}</td>
+            <td>
+              <Badge label={t.source} color={SOURCE_COLOR[t.source] ?? "var(--muted)"} />
+            </td>
+            <td className="mono">{t.event_type}</td>
+            <td className="mono">{JSON.stringify(t.condition)}</td>
             <td>{t.expert_slug}</td>
-            <td>{String(t.enabled)}</td>
+            <td>
+              <Badge
+                label={t.enabled ? "enabled" : "disabled"}
+                color={t.enabled ? "var(--green)" : "var(--gray)"}
+              />
+            </td>
           </tr>
         ))}
       </tbody>
@@ -92,25 +159,20 @@ function Dashboard({ activations }: { activations: Activation[] }) {
   return (
     <div>
       <h2>Recent activations</h2>
-      {activations.length === 0 && <p style={{ color: "#777" }}>No activations yet.</p>}
+      {activations.length === 0 && <div className="empty">No activations yet.</div>}
       {activations.map((a) => (
-        <div
-          key={a.id}
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            borderBottom: "1px solid #eee",
-            padding: "8px 0",
-          }}
-        >
-          <span>
-            <strong>{a.expert_slug}</strong> &rarr; {a.external_ref}
+        <div key={a.id} className="activation">
+          <span className="row">
+            <span className="dot" style={{ background: statusColor(a.status) }} />
+            <strong>{a.expert_slug}</strong>
+            <span className="muted" style={{ color: "var(--muted)" }}>&rarr;</span>
+            <span className="mono">{a.external_ref}</span>
           </span>
-          <span>
-            <em style={{ marginRight: 8 }}>{a.status}</em>
+          <span className="row">
+            <Badge label={a.status} color={statusColor(a.status)} />
             {a.app_url && (
               <a href={a.app_url} target="_blank" rel="noreferrer">
-                open in app.factory.ai
+                open in app.factory.ai &#8599;
               </a>
             )}
           </span>

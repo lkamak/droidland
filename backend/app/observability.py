@@ -10,12 +10,27 @@ from .sse import Broadcaster
 log = logging.getLogger("droidland.observability")
 
 
+DROIDLAND_TAG = "droidland"
+
+
 def _sessions_from_response(data: dict) -> list[dict]:
     if isinstance(data, dict):
         for key in ("sessions", "data", "items"):
             if isinstance(data.get(key), list):
                 return data[key]
     return data if isinstance(data, list) else []
+
+
+def _has_tag(session: dict, name: str) -> bool:
+    return any((t or {}).get("name") == name for t in (session.get("tags") or []))
+
+
+def _expert_from_tags(session: dict) -> str:
+    for t in session.get("tags") or []:
+        n = (t or {}).get("name", "")
+        if n.startswith("expert:"):
+            return n.split(":", 1)[1]
+    return ""
 
 
 class Observability:
@@ -30,8 +45,8 @@ class Observability:
         self._stop = asyncio.Event()
 
     async def refresh_once(self) -> int:
-        data = await self.client.list_sessions(tag="droidland")
-        sessions = _sessions_from_response(data)
+        data = await self.client.list_sessions(limit=100)
+        sessions = [s for s in _sessions_from_response(data) if _has_tag(s, DROIDLAND_TAG)]
         now = datetime.now(UTC).isoformat()
         for s in sessions:
             session_id = s.get("sessionId") or s.get("id")
@@ -40,14 +55,18 @@ class Observability:
             self.db.execute(
                 """
                 INSERT INTO session_cache
-                    (factory_session_id, status, tokens_json, app_url, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+                    (factory_session_id, expert_slug, status, tokens_json, app_url, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(factory_session_id) DO UPDATE SET
+                    expert_slug=COALESCE(
+                        NULLIF(excluded.expert_slug, ''), session_cache.expert_slug
+                    ),
                     status=excluded.status, tokens_json=excluded.tokens_json,
                     updated_at=excluded.updated_at
                 """,
                 (
                     session_id,
+                    _expert_from_tags(s),
                     s.get("status", ""),
                     dumps(s.get("tokenUsage", {})),
                     self.settings.session_app_url(session_id),

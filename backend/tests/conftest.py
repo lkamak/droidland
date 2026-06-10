@@ -33,7 +33,12 @@ class FakeFactoryClient:
         self._session_seq += 1
         sid = f"sess-{self._session_seq}"
         self.calls.append(("create_session", {"computerId": computer_id, "settings": settings}))
-        self.sessions.append({"sessionId": sid, "status": "running", "settings": settings})
+        self.sessions.append({
+            "sessionId": sid,
+            "status": "running",
+            "tags": (settings or {}).get("tags", []),
+            "settings": settings,
+        })
         return {"sessionId": sid, "status": "running"}
 
     async def post_message(self, session_id, text):
@@ -43,8 +48,8 @@ class FakeFactoryClient:
     async def get_session(self, session_id):
         return {"sessionId": session_id, "status": "running"}
 
-    async def list_sessions(self, tag=None):
-        return {"sessions": self.sessions}
+    async def list_sessions(self, computer_id=None, limit=50, cursor=None):
+        return {"sessions": self.sessions, "pagination": {"hasMore": False, "nextCursor": None}}
 
     async def interrupt_session(self, session_id):
         return {"status": "idle"}

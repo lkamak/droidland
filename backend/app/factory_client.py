@@ -79,8 +79,15 @@ class FactoryClient:
     async def get_session(self, session_id: str) -> dict[str, Any]:
         return await self._request("GET", f"/api/v0/sessions/{session_id}")
 
-    async def list_sessions(self, tag: str | None = None) -> dict[str, Any]:
-        params = {"tag": tag} if tag else None
+    async def list_sessions(
+        self, computer_id: str | None = None, limit: int = 50, cursor: str | None = None
+    ) -> dict[str, Any]:
+        # The API has no tag filter; callers filter by the session `tags` array client-side.
+        params: dict[str, Any] = {"limit": str(limit)}
+        if computer_id:
+            params["computerId"] = computer_id
+        if cursor:
+            params["cursor"] = cursor
         return await self._request("GET", "/api/v0/sessions", params=params)
 
     async def interrupt_session(self, session_id: str) -> dict[str, Any]:
