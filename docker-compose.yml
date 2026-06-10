@@ -10,7 +10,8 @@ services:
       DROIDLAND_EXPERTS_DIR: /app/.factory/droids
     volumes:
       - ./backend/app:/app/app
-      - ./.factory/droids:/app/.factory/droids:ro
+      # Authoring writes personas back to this dir, so it must be writable (no :ro).
+      - ./.factory/droids:/app/.factory/droids
       - droidland-data:/data
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
