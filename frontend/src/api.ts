@@ -54,6 +54,25 @@ export interface Usage {
   errored_sessions: number;
 }
 
+export interface Message {
+  role: string;
+  content: string;
+  timestamp?: string;
+}
+
+export interface SessionDetails {
+  activation: Activation;
+  session: Record<string, unknown>;
+  messages: Message[];
+  verdict: {
+    verdict: string;
+    branch?: string;
+    pr_url?: string;
+    summary?: string;
+  } | null;
+  trigger: Trigger | null;
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`/api${path}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -106,6 +125,7 @@ export const api = {
   testTrigger: (id: number, event: Record<string, unknown>) =>
     send<Activation>("POST", `/triggers/${id}/test`, event),
   activations: () => get<Activation[]>("/activations"),
+  activationSession: (id: number) => get<SessionDetails>(`/activations/${id}/session`),
   sessions: () => get<Record<string, unknown>[]>("/sessions"),
   computers: () => get<Computer[]>("/computers"),
   usage: () => get<Usage>("/usage"),

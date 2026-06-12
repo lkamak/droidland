@@ -106,3 +106,7 @@ class FactoryClient:
 
     async def interrupt_session(self, session_id: str) -> dict[str, Any]:
         return await self._request("POST", f"/api/v0/sessions/{session_id}/interrupt")
+
+    async def get_session_messages(self, session_id: str) -> dict[str, Any]:
+        """Get message history for a session."""
+        return await self._request("GET", f"/api/v0/sessions/{session_id}/messages")

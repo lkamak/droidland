@@ -205,6 +205,60 @@ async def activations_list(request: Request) -> list[dict[str, Any]]:
     return ctx(request).db.query("SELECT * FROM activations ORDER BY id DESC")
 
 
+@router.get("/activations/{activation_id}/session")
+async def activation_session_details(request: Request, activation_id: int) -> dict[str, Any]:
+    """Get detailed session information for an activation, including messages and verdict."""
+    c = ctx(request)
+    
+    # Get activation details
+    activation = c.db.query_one("SELECT * FROM activations WHERE id = ?", (activation_id,))
+    if activation is None:
+        raise HTTPException(404, "activation not found")
+    
+    if not activation.get("factory_session_id"):
+        raise HTTPException(400, "activation has no associated session")
+    
+    session_id = activation["factory_session_id"]
+    
+    # Get session details and messages from Factory API
+    try:
+        session = await c.client.get_session(session_id)
+        messages_data = await c.client.get_session_messages(session_id)
+    except Exception as e:
+        raise HTTPException(500, f"failed to fetch session from Factory API: {e}") from e
+    
+    # Get trigger details if available
+    trigger = None
+    if activation.get("trigger_id"):
+        trigger = c.db.query_one("SELECT * FROM triggers WHERE id = ?", (activation["trigger_id"],))
+    
+    # Extract verdict from messages
+    verdict = None
+    messages = messages_data.get("messages", [])
+    for msg in reversed(messages):
+        if msg.get("role") == "assistant":
+            content = msg.get("content", "")
+            # Look for JSON verdict block in markdown code fence
+            if "```json" in content and "verdict" in content:
+                try:
+                    import re
+                    pattern = r'```json\s*(\{[^`]*"verdict"[^`]*\})\s*```'
+                    match = re.search(pattern, content, re.DOTALL)
+                    if match:
+                        verdict = json.loads(match.group(1))
+                        break
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+    
+    return {
+        "activation": activation,
+        "session": session,
+        "messages": messages,
+        "verdict": verdict,
+        "trigger": trigger,
+    }
+
+
 @router.get("/sessions")
 async def sessions_list(request: Request) -> list[dict[str, Any]]:
     return ctx(request).db.query("SELECT * FROM session_cache ORDER BY updated_at DESC")

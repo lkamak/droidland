@@ -170,3 +170,87 @@ def test_computers_endpoint(app_client, context):
     assert comp_123["provider"] == "e2b"
     assert comp_123["state"] == "running"
     assert comp_123["repos_json"] == '["acme/widgets","acme/tools"]'
+
+
+def test_activation_session_details(app_client, context):
+    # Create an activation with a session ID
+    context.db.execute(
+        """
+        INSERT INTO activations
+            (expert_slug, external_ref, factory_session_id, app_url, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "code-reviewer",
+            "test/repo#123",
+            "sess-1",
+            "https://app.factory.ai/sessions/sess-1",
+            "running",
+            "2026-06-10T12:00:00Z",
+        ),
+    )
+
+    # Get the activation ID
+    activation = context.db.query_one(
+        "SELECT id FROM activations WHERE external_ref = ?", ("test/repo#123",)
+    )
+    activation_id = activation["id"]
+
+    # Test the endpoint
+    resp = app_client.get(f"/api/activations/{activation_id}/session")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    # Check response structure
+    assert "activation" in body
+    assert "session" in body
+    assert "messages" in body
+    assert "verdict" in body
+    assert "trigger" in body
+
+    # Verify activation data
+    assert body["activation"]["external_ref"] == "test/repo#123"
+    assert body["activation"]["factory_session_id"] == "sess-1"
+
+    # Verify session data
+    assert body["session"]["sessionId"] == "sess-1"
+
+    # Verify messages
+    assert len(body["messages"]) == 2
+    assert body["messages"][0]["role"] == "user"
+    assert body["messages"][1]["role"] == "assistant"
+
+    # Verify verdict was parsed
+    assert body["verdict"] is not None
+    assert body["verdict"]["verdict"] == "pass"
+    assert body["verdict"]["summary"] == "No issues found"
+
+
+def test_activation_session_details_not_found(app_client):
+    resp = app_client.get("/api/activations/9999/session")
+    assert resp.status_code == 404
+
+
+def test_activation_session_details_no_session(app_client, context):
+    # Create an activation without a session ID
+    context.db.execute(
+        """
+        INSERT INTO activations
+            (expert_slug, external_ref, factory_session_id, app_url, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "code-reviewer",
+            "test/repo#456",
+            "",
+            "",
+            "created",
+            "2026-06-10T12:00:00Z",
+        ),
+    )
+
+    activation = context.db.query_one(
+        "SELECT id FROM activations WHERE external_ref = ?", ("test/repo#456",)
+    )
+    resp = app_client.get(f"/api/activations/{activation['id']}/session")
+    assert resp.status_code == 400

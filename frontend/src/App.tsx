@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Activation, Computer, Expert, Trigger, Usage, api } from "./api";
 import { ExpertEditor } from "./ExpertEditor";
 import { TriggerEditor } from "./TriggerEditor";
+import { SessionDetailDrawer } from "./SessionDetailDrawer";
 
 type Tab = "dashboard" | "catalog" | "triggers";
 
@@ -289,6 +290,8 @@ function Dashboard({
   computers: Computer[];
   usage: Usage | null;
 }) {
+  const [selectedActivation, setSelectedActivation] = useState<number | null>(null);
+
   return (
     <div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "2rem" }}>
@@ -298,7 +301,7 @@ function Dashboard({
       <h2>Recent activations</h2>
       {activations.length === 0 && <div className="empty">No activations yet.</div>}
       {activations.map((a) => (
-        <div key={a.id} className="activation">
+        <div key={a.id} className="activation" onClick={() => setSelectedActivation(a.id)}>
           <span className="row">
             <span className="dot" style={{ background: statusColor(a.status) }} />
             <strong>{a.expert_slug}</strong>
@@ -308,13 +311,25 @@ function Dashboard({
           <span className="row">
             <Badge label={a.status} color={statusColor(a.status)} />
             {a.app_url && (
-              <a href={a.app_url} target="_blank" rel="noreferrer">
+              <a 
+                href={a.app_url} 
+                target="_blank" 
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+              >
                 open in app.factory.ai &#8599;
               </a>
             )}
           </span>
         </div>
       ))}
+
+      {selectedActivation !== null && (
+        <SessionDetailDrawer
+          activationId={selectedActivation}
+          onClose={() => setSelectedActivation(null)}
+        />
+      )}
     </div>
   );
 }

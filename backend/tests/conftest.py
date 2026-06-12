@@ -55,6 +55,24 @@ class FakeFactoryClient:
     async def interrupt_session(self, session_id):
         return {"status": "idle"}
 
+    async def get_session_messages(self, session_id):
+        verdict_json = '{"verdict": "pass", "summary": "No issues found"}'
+        assistant_content = f"I'll review the changes.\n\n```json\n{verdict_json}\n```"
+        return {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Review this PR",
+                    "timestamp": "2026-06-10T12:00:00Z",
+                },
+                {
+                    "role": "assistant",
+                    "content": assistant_content,
+                    "timestamp": "2026-06-10T12:01:00Z",
+                },
+            ]
+        }
+
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
